@@ -40,15 +40,30 @@ Krydstjek gerne antallet mod Meta Ads MCP (`ads_get_ad_entities`, felt `lead`,
 
 ## Sådan afgøres hvad der er "nyt"
 
-Der findes ingen tilstandsfil. Skæringsdatoen læses fra Gmail:
+Der findes ingen tilstandsfil. Rækkefølgen er: **find først ud af hvem der allerede er
+sendt — derefter hvad der er kommet ind.** Aldrig omvendt.
 
-1. Søg i Gmail efter seneste mail sendt til `holmsmaler.dk` om leads.
-2. Læs den. Emnelinjen og teksten angiver, hvilken periode den dækkede
-   (fx "4 nye leads fra Meta Ads – 2.-4. september" → dækker t.o.m. 4. september).
-3. Alt med `created_time` efter den skæring er nyt og skal sendes.
+1. **Hent alle tidligere lead-mails.** Søg i Gmail på `to:holmsmaler.dk` uden nogen
+   nøgleord, fx `to:holmsmaler.dk newer_than:60d`. Læs dem alle, ikke kun den nyeste.
+2. **Byg listen over allerede sendte leads** — navn + telefonnummer fra hver mail.
+   Det er denne liste, der afgør, hvad der må sendes. Ikke en dato.
+3. **Notér tidspunktet på det nyeste allerede sendte lead.** Det bruges kun i svaret
+   ("INGEN NYE LEADS SIDEN ..."), ikke som filter.
+4. **Hent leads fra Zapier** og frasortér alle, hvis navn/telefon står på listen fra
+   punkt 2.
+5. Det, der er tilbage, er nyt og må sendes.
 
-Tjek altid mod den faktiske mail — ikke mod en antagelse om, hvornår rutinen sidst kørte.
-Rutinen kan have kørt uden at sende noget, og Mikkel sender også selv manuelt.
+### Faldgruber — begge har kostet kunden en dobbeltmail
+
+- **Søg aldrig med nøgleord som `leads`.** Mails med emnet "Nyt lead" (ental) matcher
+  ikke `leads`, og så forsvinder de lydløst ud af resultatet. Søgningen ser rigtig ud,
+  men mangler netop den mail, man skulle bruge. Søg bredt på modtageren og læs alt.
+- **Brug ikke skæringsdatoen fra emnelinjen som filter.** Et lead kan være sendt i en
+  mail, man ikke fandt — så er datoen forkert, og leadet ryger afsted igen.
+  Sammenlign lead for lead.
+
+Rutinen kan have kørt uden at sende noget, og Mikkel sender også selv manuelt — begge
+dele er grunde til at tjekke de faktiske mails frem for at antage noget om sidste kørsel.
 
 ## Mailformat
 
@@ -90,6 +105,17 @@ Detaljer der betyder noget:
   ændres ikke.
 - Hold pris- og performancesnak ude af kundemailen, medmindre tallene er gode.
   Send det til Mikkel i stedet.
+
+## Når der ingen nye leads er
+
+Så sendes **ingen mail til kunden**. Svaret i sessionen er præcis denne ene linje:
+
+```
+INGEN NYE LEADS SIDEN {dd-mm-åååå} kl. {HH:MM}
+```
+
+Tidspunktet er det nyeste lead, der allerede er sendt til kunden (dansk tid). En mail
+"der er ikke sket noget" til kunden er spam — den skal aldrig sendes.
 
 ## Notifikation
 
