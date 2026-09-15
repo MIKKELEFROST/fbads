@@ -35,6 +35,12 @@ Returnerer nyeste først med `created_time`, `full_name`, `phone_number`, `email
 Hvis forbindelsen mangler en standardkonto, fejler kaldet med "Authorization
 access_token missing". Sæt den med `manage_zapier_connections` og prøv igen.
 
+Obs. 15-09-2026: i planlagte kørsler er Zapier-serveren ikke autoriseret — dens værktøjer
+er slet ikke tilgængelige, og en planlagt session kan ikke selv køre OAuth-flowet.
+Autorisation skal ske i en interaktiv session (connector-indstillinger på claude.ai eller
+`/mcp`). Indtil da kan en planlagt kørsel bekræfte antal og dato via Meta Ads MCP, men
+ikke hente kontaktoplysninger.
+
 Krydstjek gerne antallet mod Meta Ads MCP (`ads_get_ad_entities`, felt `lead`,
 `time_increment: "1"`) — den kan bekræfte antal og dato, men ikke oplysningerne.
 
@@ -90,6 +96,31 @@ Detaljer der betyder noget:
   ændres ikke.
 - Hold pris- og performancesnak ude af kundemailen, medmindre tallene er gode.
   Send det til Mikkel i stedet.
+
+## Åben sag: leveringen ser ud til at være flyttet til et CRM (obs. 15-09-2026)
+
+**Indtil Mikkel har taget stilling: send ikke lead-lister til kunden.**
+
+Den seneste lead-liste i formatet ovenfor dækkede t.o.m. 10. september (sendt 11-09).
+Efter den er der i stedet sendt tre korte mails til `tomrer@holmsmaler.dk` (cc Mikkel)
+med emnet `NYT LEAD` og teksten "der er et nyt lead - du finder det i CRM systemet"
+med link til `https://crm.holmsmaler.dk/`. Ingen kontaktoplysninger i selve mailen.
+
+Tidspunkterne matcher Meta Ads' leadtal én-til-én:
+
+| Lead iflg. Meta Ads | `NYT LEAD`-mail (UTC) |
+|---|---|
+| 14-09, 1 stk. | 14-09 14:45 |
+| 15-09, 2 stk. | 15-09 04:00 og 15-09 07:27 |
+
+Alle leads efter 10. september er altså allerede givet videre — bare ad den nye vej.
+En liste i det gamle format ville være en dublet og ville sende kontaktoplysninger på
+mail, som leveringen netop ser ud til at være gået væk fra.
+
+Bemærk at skæringsreglen længere oppe ikke fanger det her: den leder efter den seneste
+*liste* og ville pege på 10. september og dermed udløse tre dubletter. Reglen skal enten
+omskrives til at tælle `NYT LEAD`-mails med som skæring, eller også skal rutinen lukkes
+ned, hvis CRM'et har overtaget. Det er Mikkels beslutning.
 
 ## Notifikation
 
