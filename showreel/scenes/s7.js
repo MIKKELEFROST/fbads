@@ -461,14 +461,10 @@
     ctx.fillRect(-60, -60, 2040, 1200);
   }
 
-  // Engine hit-shake, mirrored from engine.js, so the contract frame can be pinned.
+  // Undo the engine hit-shake (R.unshake) so the contract frames are pixel-exact.
   function pinShake(ctx, api, w) {
     if (w <= 0 || api.detail !== 1) return;
-    const t = api.t, a = R.impact(t, 11), sk = R.registry.s7.shake ?? 1;
-    const sx = R.noise2(t * 38, 3.1) * a * 14, sy = R.noise2(7.7, t * 38) * a * 14, sr = R.noise2(t * 21, 19.3) * a * 0.006;
-    ctx.translate(CX, CY);
-    ctx.rotate(-sr * sk * w);
-    ctx.translate(-CX - sx * sk * w, -CY - sy * sk * w);
+    R.unshake(ctx, api, w);
   }
 
   // ═════════════════════════════ scene ═════════════════════════════
@@ -484,7 +480,7 @@
       if (lt < T_POP) {
         // The engine adds hit CA from the beat on; hold the previous frame's amount so
         // the cut from s6 is pixel-identical (grain aside).
-        if (api.detail === 1 && api.post) api.post.ca = 0.9 * (R.impact(api.t - 1 / 60, 7) - R.impact(api.t, 7));
+        if (api.detail === 1 && api.post) api.post.ca = 0.9 * (R.impact(api.frameT - 1 / 60, 7) - R.impact(api.frameT, 7));
         ctx.fillStyle = P.bone;
         ctx.beginPath();
         ctx.arc(CX, CY, DOT_R, 0, TAU);

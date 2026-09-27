@@ -329,7 +329,7 @@
       return [Math.cos(a) * r, Math.sin(a) * r];
     });
   S.rect = (w, h) => [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]];
-  // Resample a closed polygon to n evenly spaced points (by arc length), starting at the vertex nearest angle -90°.
+  // Resample a closed polygon to n evenly spaced points (by arc length), starting at pts[0].
   S.resample = (pts, n = 128) => {
     const L = [];
     let total = 0;

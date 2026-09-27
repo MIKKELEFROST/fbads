@@ -160,7 +160,10 @@ async function main() {
       const per = [];
       for (const t of times) {
         const a = performance.now();
-        R.frame(t, { samples: 1 });
+        const c = R.frame(t, { samples: 1 });
+        // Force the deferred Canvas/WebGL work to finish so the timing is the real raster cost.
+        const gl = c.getContext('webgl2');
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
         per.push([t, performance.now() - a]);
       }
       return per;
@@ -179,28 +182,32 @@ async function main() {
     const samples = num('samples', 1);
     const fmt = A.format === 'jpeg' ? 'jpeg' : 'png';
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-'));
-    const chunk = Math.ceil(frames.length / workers);
-    let done = 0;
-    const jobs = Array.from({ length: workers }, async (_, w) => {
-      const mine = frames.slice(w * chunk, (w + 1) * chunk);
-      if (!mine.length) return null;
-      const file = path.join(tmp, `chunk_${String(w).padStart(2, '0')}.mkv`);
-      const ff = spawn(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', fmt === 'png' ? 'png' : 'mjpeg', '-i', '-', '-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p', file], { stdio: ['pipe', 'inherit', 'inherit'] });
+    // Small chunks pulled from a shared queue, so heavy sections (e.g. the multiverse grid)
+    // spread across all workers instead of stalling one of them.
+    const CH = num('chunk', 20);
+    const chunks = [];
+    for (let i = 0; i < frames.length; i += CH) chunks.push(frames.slice(i, i + CH));
+    const files = chunks.map((_, i) => path.join(tmp, `chunk_${String(i).padStart(4, '0')}.mkv`));
+    let next = 0, done = 0;
+    const jobs = Array.from({ length: workers }, async () => {
       const { browser, page, consoleErrors } = await openPage(port);
-      for (const f of mine) {
-        const d = await page.evaluate(({ t, samples, fmt }) => R.frame(t, { samples }).toDataURL('image/' + fmt, 0.95), { t: f / FPS, samples, fmt });
-        const buf = dataUrlToBuf(d);
-        if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
-        done++;
-        if (done % 30 === 0) process.stdout.write(`\r${done}/${frames.length} frames  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+      while (next < chunks.length) {
+        const ci = next++;
+        const ff = spawn(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', fmt === 'png' ? 'png' : 'mjpeg', '-i', '-', '-c:v', 'ffv1', '-level', '3', '-pix_fmt', 'yuv444p', files[ci]], { stdio: ['pipe', 'inherit', 'inherit'] });
+        for (const f of chunks[ci]) {
+          const d = await page.evaluate(({ t, samples, fmt }) => R.frame(t, { samples }).toDataURL('image/' + fmt, 0.95), { t: f / FPS, samples, fmt });
+          const buf = dataUrlToBuf(d);
+          if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
+          done++;
+          if (done % 30 === 0) process.stdout.write(`\r${done}/${frames.length} frames  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+        }
+        ff.stdin.end();
+        await new Promise((r) => ff.on('close', r));
       }
-      ff.stdin.end();
-      await new Promise((r) => ff.on('close', r));
       errCount += await reportErrors(page, consoleErrors);
       await browser.close();
-      return file;
     });
-    const files = (await Promise.all(jobs)).filter(Boolean);
+    await Promise.all(jobs);
     process.stdout.write('\n');
     const list = path.join(tmp, 'list.txt');
     fs.writeFileSync(list, files.map((f) => `file '${f}'`).join('\n'));

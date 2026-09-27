@@ -537,14 +537,10 @@ void main() {
     c.restore();
   }
 
-  // Engine hit-shake, mirrored from engine.js, so the contract frame can be pinned exactly.
+  // Undo the engine hit-shake (R.unshake) so the contract frames are pixel-exact.
   function pinContract(ctx, api, w) {
     if (w <= 0 || api.detail !== 1) return;
-    const t = api.t, a = R.impact(t, 11), k = (R.registry.s5.shake ?? 1) * w;
-    const sx = R.noise2(t * 38, 3.1) * a * 14, sy = R.noise2(7.7, t * 38) * a * 14, sr = R.noise2(t * 21, 19.3) * a * 0.006;
-    ctx.translate(CX, CY);
-    ctx.rotate(-sr * k);
-    ctx.translate(-CX - sx * k, -CY - sy * k);
+    R.unshake(ctx, api, w);
   }
 
   R.scene({

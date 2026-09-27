@@ -825,12 +825,7 @@
   // ═════════════════════════════════════════════════════════════════════════════════════════
   function pinContract(ctx, api, lt) {
     if (lt < HOLD_T - 0.02 || api.detail !== 1) return;
-    const t = api.t, a = R.impact(t, 11);
-    const sk = R.registry.s3.shake ?? 1;
-    const sx = R.noise2(t * 38, 3.1) * a * 14, sy = R.noise2(7.7, t * 38) * a * 14, sr = R.noise2(t * 21, 19.3) * a * 0.006;
-    ctx.translate(CX, CY);
-    ctx.rotate(-sr * sk);
-    ctx.translate(-CX - sx * sk, -CY - sy * sk);
+    R.unshake(ctx, api, 1);
   }
 
   // ═════════════════════════════════════════════════════════════════════════════════════════

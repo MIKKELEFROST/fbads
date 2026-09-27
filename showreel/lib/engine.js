@@ -185,17 +185,30 @@ void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0.,1.); }`;
     }
   }
   const glTargets = new Map();
+  let elastic = null; // shared overflow target: resized in place, so its context and programs survive
   // R.shader(fragSrc, uniforms, { w, h }) → canvas with the rendered result (premultiplied alpha).
   // fragSrc is appended to GLSL_HEADER (see above: vUv, fragColor, uRes, uTime, noise helpers are predeclared).
   // Canvas / {canvas} uniforms become sampler2D textures (flipped so vUv samples upright).
+  // Note: plain JS arrays of length 2–4 upload as vec2–vec4; use a Float32Array of length ≥ 5 for float[] uniforms.
+  // The returned canvas is reused by the next call of the same size: drawImage it before calling again.
   R.shader = (src, uniforms = {}, { w = W, h = H } = {}) => {
     w = Math.max(8, Math.round(w));
     h = Math.max(8, Math.round(h));
     const k = w + 'x' + h;
     let T = glTargets.get(k);
-    if (!T) {
+    if (!T && glTargets.size < 8) {
       T = new GLTarget(w, h);
       glTargets.set(k, T);
+    }
+    if (!T) {
+      // Many distinct sizes (e.g. scenes drawn into animating panels): resize one context instead of
+      // creating a new WebGL context and recompiling every program per size.
+      if (!elastic) elastic = new GLTarget(w, h);
+      if (elastic.canvas.width !== w || elastic.canvas.height !== h) {
+        elastic.canvas.width = w;
+        elastic.canvas.height = h;
+      }
+      T = elastic;
     }
     return T.run(src, uniforms);
   };
@@ -215,6 +228,16 @@ void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0.,1.); }`;
     const amp = a * 14;
     return [R.noise2(t * 38, 3.1) * amp, R.noise2(7.7, t * 38) * amp, R.noise2(t * 21, 19.3) * a * 0.006];
   }
+  const NO_SHAKE = { sx: 0, sy: 0, sr: 0 };
+  // Undo the camera shake the engine applied to this frame, weighted by w (0..1).
+  // Scenes call it at the top of render() to pin handoff-contract frames pixel-exact.
+  R.unshake = (ctx, api, w = 1) => {
+    const s = api.shakeApplied || NO_SHAKE;
+    if (w <= 0 || (!s.sx && !s.sy && !s.sr)) return;
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(-s.sr * w);
+    ctx.translate(-W / 2 - s.sx * w, -H / 2 - s.sy * w);
+  };
 
   // ───────────────────────── scene rendering ─────────────────────────
   function activeScene(t) {
@@ -222,7 +245,8 @@ void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0.,1.); }`;
     return R.registry[R.SCENES[R.SCENES.length - 1].id];
   }
   let postState = null;
-  function makeApi(scene, t, detail) {
+  let frameInfo = { t: 0, samples: 1, subDt: 0 };
+  function makeApi(scene, t, detail, extra) {
     return {
       t, // global time
       lt: t - scene.start, // local time
@@ -234,7 +258,12 @@ void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0.,1.); }`;
       P: R.P,
       layer: (name, w, h) => R.layer(scene.id + ':' + name + ':' + depth, w, h),
       shader: (src, u, o = {}) => R.shader(src, u, { w: (o.w || W) * (o.scale || 1) * Math.min(1, detail * 1.25), h: (o.h || H) * (o.scale || 1) * Math.min(1, detail * 1.25) }),
-      post: postState, // scenes may set post.ca / post.glitch / post.flash / post.grain / post.vignette / post.bloom
+      post: postState, // scenes may set post.ca / post.glitch / post.flash / post.grain / post.vignette / post.bloom / post.hud
+      frameT: frameInfo.t, // time of the output frame this sub-sample belongs to
+      samples: frameInfo.samples, // motion-blur sub-samples in this render
+      subDt: frameInfo.subDt, // seconds between consecutive sub-samples (0 when samples = 1)
+      shakeApplied: NO_SHAKE, // camera shake the engine applied around this render (see R.unshake)
+      ...extra,
     };
   }
   let depth = 0;
@@ -250,10 +279,18 @@ void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0.,1.); }`;
     ctx.clip();
     ctx.translate(x, y);
     ctx.scale(w / W, h / H);
-    const detail = (w / W) * (depth > 1 ? 1 : 1);
+    ctx.fillStyle = R.P.ink; // same pre-fill as the main render path
+    ctx.fillRect(0, 0, W, H);
+    const detail = w / W;
+    // Nested scenes get a private post object, so their flash/glitch/bloom never leak into the host frame.
+    const api = makeApi(scene, t, detail, { post: Object.assign({}, postState) });
+    ctx.save();
     try {
-      scene.render(ctx, t - scene.start, makeApi(scene, t, detail));
+      scene.render(ctx, t - scene.start, api);
+    } catch (e) {
+      R.errors.push({ scene: id + '(panel)', t, msg: String(e && e.stack) });
     } finally {
+      ctx.restore();
       ctx.restore();
       depth--;
     }
@@ -265,15 +302,18 @@ void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0.,1.); }`;
     ctx.fillRect(0, 0, W, H);
     const scene = activeScene(t);
     if (!scene) return;
-    const [sx, sy, sr] = shakeOffset(t);
+    // Shake is sampled once per OUTPUT frame (not per motion-blur sub-sample), so thin lines don't
+    // double up on hit frames; it simply jumps frame to frame like a handheld camera.
+    const [sx, sy, sr] = shakeOffset(frameInfo.t);
     const k = scene.shake ?? 1;
+    const applied = { sx: sx * k, sy: sy * k, sr: sr * k };
     ctx.save();
-    ctx.translate(W / 2 + sx * k, H / 2 + sy * k);
-    ctx.rotate(sr * k);
+    ctx.translate(W / 2 + applied.sx, H / 2 + applied.sy);
+    ctx.rotate(applied.sr);
     ctx.translate(-W / 2, -H / 2);
     ctx.save();
     try {
-      scene.render(ctx, t - scene.start, makeApi(scene, t, 1));
+      scene.render(ctx, t - scene.start, makeApi(scene, t, 1, { shakeApplied: applied }));
     } catch (e) {
       console.error('scene ' + scene.id + ' @' + t.toFixed(3) + ': ' + (e && e.stack));
       R.errors.push({ scene: scene.id, t, msg: String(e && e.stack) });
@@ -335,6 +375,7 @@ void main(){
     const shutter = opts.shutter ?? 0.5;
     const dt = shutter / R.FPS;
     postState = { ca: 0, glitch: 0, flash: 0, grain: 0.03, vignette: 0.55, bloom: 0, hud: 1 };
+    frameInfo = { t, samples: S, subDt: S > 1 ? dt / S : 0 };
     for (let i = 0; i < S; i++) {
       const ts = t + (i / S) * dt;
       renderAt(sceneCtx, ts);

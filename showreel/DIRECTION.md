@@ -106,7 +106,14 @@ Toolkit highlights (`window.R`):
   `vUv, fragColor, uRes, uTime`, `hash11/hash21/hash22, vnoise, snoise(vec3), fbm(vec3), smin, rot2`.
   Canvas uniforms become `sampler2D` (e.g. render text into `api.layer()` and refract it). Output
   premultiplied alpha (or opaque).
-- `R.renderScene(id, globalT, ctx, x, y, w, h)` renders any scene into a viewport (used by s6).
+- `R.renderScene(id, globalT, ctx, x, y, w, h)` renders any scene into a viewport (used by s6). The
+  viewport is pre-filled with ink, errors are caught and logged, and the nested scene gets a private
+  `api.post` copy, so it can't change the host frame's post-processing.
+- Camera shake is sampled once per output frame. `R.unshake(ctx, api, w)` at the top of `render()`
+  cancels it (weight `w`), which is how handoff-contract frames stay pixel-exact on a hit.
+- `api.frameT` (output-frame time), `api.samples` and `api.subDt` (seconds between motion-blur
+  sub-samples; 0 when samples = 1) let a scene box-filter very fast movers itself.
+- `tools/render.mjs check` forces a GPU sync per frame, so its ms/frame is the real raster cost.
 
 ## 5. Tools & review loop
 

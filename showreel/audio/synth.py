@@ -1068,7 +1068,7 @@ def kinetic(mix, kit):
 
     # TIMING: letters land on consecutive 32nds → tuned ticks walking up the Eb pentatonic, L → R.
     for i, m in enumerate(('Eb5', 'F5', 'G5', 'Bb5', 'C6', 'Eb6')):
-        tk = pluck(hz(nm(m)), 0.16, 0.05, ('tim', i), 3, 1.2)
+        tk = pluck(hz(nm(m)), 0.16, 0.05, ('tim', i), hf=1.2)
         mix.add('music', tk, b(7) + i * S32, -16 + 0.6 * i, pan=-0.6 + 0.24 * i, room=0.2, dly=0.12)
     # "is": the tittle drops in on the off-beat 8th.
     mix.add('music', pop(2600, hz(nm('C6')), 0.14, 0.004, 0.03, 'tittle', 0.3), b(5) + S8, -19, pan=0.1, room=0.2)
@@ -1089,7 +1089,8 @@ def kinetic(mix, kit):
 # ─────────────────────────────────── 4.6875 – 7.5  SHAPE LANGUAGE ────────────────────────────
 def shape(mix, kit):
     T0 = b(10)
-    # Portal arrival: kick + boom + a bright bloom, then the swoosh-through falls away.
+    # Portal arrival: the long drop kick (its own sub boom) + a bright bloom + a membrane pop,
+    # then the swoosh-through falls away as a pitch-down sweep.
     mix.add('kick', kit.kick['drop'], T0, 1.0)
     mix.duck(T0, 1.0, 1.6)
     n = nsamp(0.5)
@@ -1268,7 +1269,8 @@ T_GAP = b(28) - 0.2
 
 
 def stutter(notes, key):
-    """BAM + three 64th-note retriggers of its own attack (each a semitone-ish higher), crushed."""
+    """BAM + three 64th-note retriggers of its own attack laid over it (each ~0.9 semitone
+    higher), plus a bit-crushed copy that decays away — glitch as a transient, not a bed."""
     s = stab(notes, 0.34, ('stut', key), 1.25)
     L = smp(S32 / 2)
     out = np.zeros((2, s.shape[1] + 3 * L))
@@ -1333,14 +1335,14 @@ def lockup(mix, kit):
     br = tvfilt(br, 'lp', 250 + 1600 * np.exp(-t / 0.25), 1.2) * smoothstep(0, 0.004, t) * np.exp(-t / 0.55)
     mix.add('hits', fade(norm(br), 3, 2400), T0, -8, hall=0.2)
 
-    # Warm Fm9 bed with a long hall; the final impact's duck makes it swell in behind the hit.
+    # Warm Fm9 bed with a long hall; the final impact's long duck (2.7× release) makes it swell
+    # in behind the hit rather than sit on top of it.
     dur = 15.0 - T0
     tt = taxis(nsamp(dur))
     bed = pad(chord('F3', 'C4', 'Eb4', 'G4', 'Ab4', 'C5'), dur, 'bed',
               900 + 900 * smoothstep(0, 0.8, tt) - 400 * smoothstep(1.0, 1.875, tt), 7, 14, 0.6, 0.02, 0.05)
     bed *= 1 - 0.6 * smoothstep(0.85, 1.875, tt)            # the bed exhales under the sting
     mix.add('pad', bed, T0, -11, hall=0.45)
-    mix.duck(T0 + 0.001, 1.0, 2.2)
 
     # The dot leaps over the word and lands as the full stop (callback to the intro bloops).
     mix.add_end('fx', whoosh(0.3, 600, 3500, 1.3, 2.0, (0.0, 0.45), 'leap', 0.3), b(29), -24)

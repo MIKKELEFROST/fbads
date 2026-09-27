@@ -14,7 +14,7 @@ a fully synthesized soundtrack locked to the same 128 BPM grid.
 ## Render
 
 ```bash
-pip install imageio-ffmpeg numpy          # ffmpeg binary + audio deps
+pip install imageio-ffmpeg numpy scipy pillow   # ffmpeg binary + audio deps
 python3 audio/synth.py                    # → audio/reel.wav
 node tools/render.mjs video --samples 4 --workers 3 --audio audio/reel.wav --out out/reel.mp4
 ```

@@ -892,12 +892,7 @@
   function pinContract(ctx, api, lt) {
     const k = 1 - clamp(lt * 120);
     if (k <= 0 || api.detail !== 1) return;
-    const t = api.t, a = R.impact(t, 11);
-    const sk = R.registry.s2.shake ?? 1;
-    const sx = R.noise2(t * 38, 3.1) * a * 14, sy = R.noise2(7.7, t * 38) * a * 14, sr = R.noise2(t * 21, 19.3) * a * 0.006;
-    ctx.translate(CX, CY);
-    ctx.rotate(-sr * sk * k);
-    ctx.translate(-CX - sx * sk * k, -CY - sy * sk * k);
+    R.unshake(ctx, api, k);
   }
 
   // ═════════════════════════════════════════════════════════════════════════════════════════

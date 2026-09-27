@@ -27,6 +27,7 @@ from scipy import signal as sps
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+sys.dont_write_bytecode = True               # keep the repo free of __pycache__
 from synth import BEAT, N, SR, lufs, kweight, true_peak  # noqa: E402
 
 SCENES = [('s1 IGNITION', 0, 4), ('s2 KINETIC', 4, 10), ('s3 SHAPE', 10, 16), ('s4 DEPTH', 16, 20),
