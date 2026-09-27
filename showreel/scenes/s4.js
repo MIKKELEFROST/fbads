@@ -8,7 +8,7 @@
 //                      flash disc, a screen-space shock ring (r 300 → 700 over f450–452) and a
 //                      bloom surge; particles fly out on an expoOut radial flight into a Fibonacci
 //                      sphere (R 330), 28% overshoot and settle; the spin whips in and decays
-//    0.10   "R 330"    radius dimension + callout (mono, hairline leader — the s3 panel language)
+//    0.12   "R 330"    radius dimension + callout (mono, hairline leader — the s3 panel language)
 //    0.469  TORUS      sphere latitude → tube angle: the poles punch through to form the hole.
 //                      Snap ease centred on the beat, staggered top → bottom, mid-flight bulge
 //    0.56   "N 1400"   callout on the torus rim
@@ -20,23 +20,25 @@
 //    1.406  TUNNEL     the landscape rolls up: every row bends (true constant-curvature bend, far
 //                      rows first, sweeping toward the camera) into a ring around the view axis.
 //                      Ridges now point at the vanishing point; the same band occlusion holds
-//    1.49+  DRAIN      rings are sucked into the vanishing point on log-spiral paths, far rings
-//                      first, heating bone → signal; a signal core glow builds there
-//    1.72   DOT        the signal dot accretes as the rings land, pops to 18 as the last (nearest)
-//                      ring lands, settles to r=14
+//    1.44   DOT        a small signal dot is born at the vanishing point, in a tight glow
+//    1.47+  DRAIN      rings contract into it (far rings first), whirling in on spiral paths as
+//                      they near the centre and heating bone → signal; the last lands at 1.815
+//    1.826  POP        the dot pops to 18 on the last (nearest) ring, settles to r=14
 //    1.845+ CONTRACT   ink + signal dot r=14 at (960,540), nothing else (frames 561–562)
 //
 //  Brightness is tiered by depth (near: bone, α 1, r 3.5–5 · mid: bone2, α .7, r 2.5 · far: gray,
-//  α .35, r 1.2), ~8% signal accents at full saturation, 5 lime sparks. Ridge lines 1.75 px bone,
+//  α .35, r 1.2), ~8% signal accents at full saturation, 5 lime sparks. Ridge lines ≈1.75 px bone,
 //  α .9 at the front → .25 at the back. No depth-of-field blur: depth reads through the tiers.
 //
 //  Rhythm: every beat gets a 120 ms inhale (−4%) → spring kick, plus an energy flash. Each
 //  morph's steepest point sits on its beat.
 //
 //  Rendering: hand-rolled perspective camera (dolly, roll, yaw sway). Particles are evaluated at
-//  t and one motion-blur sub-sample earlier and drawn as capsules, so the engine's sub-samples
-//  fuse into streaks. Dots are batched by (alpha level, colour) into a few filled paths per
-//  row / per frame — per-dot draw calls are what made this scene slow.
+//  t and one motion-blur sub-sample earlier (api.subDt) and drawn as discs stretched along that
+//  path, so the engine's sub-samples fuse into streaks. Dots are drawImage calls from one sprite
+//  atlas (they batch on the GPU canvas; round-capped strokes and multi-arc paths did not). The
+//  burst flash and shock rings are timed by the output frame (crisp graphics, no smear); the
+//  line work gets more sub-samples where it moves fastest (samplesAt).
 //  api.detail < 1 (multiverse panels) thins particles and line work and drops the callouts.
 //
 //  Pure function of lt. Static data is precomputed at module scope with R.rng — no Math.random,
@@ -290,12 +292,13 @@
     rx = qx * g.czC - qy * g.szC; qy = qx * g.szC + qy * g.czC; qx = rx;
 
     // ── drain (camera space). Radius shrinks by (1 − k) while the angle advances by
-    // −w·ln(1 − k): every particle rides an equiangular (log) spiral, so angular speed climbs as it
-    // nears the centre. Staggered arrivals (far rings first) wind the tunnel into a vortex.
+    // w·(−ln(1 − k) − k): a log spiral with its linear term removed, so a big ring first contracts
+    // cleanly (a ring spinning about its own centre only smears) and the whirl builds as it nears
+    // the centre. Staggered arrivals (far rings first) wind the tunnel into a vortex.
     const ck = t < TC0 - 0.01 ? 0 : collapseK(i, t);
     if (ck > 0) {
       const k = 1 - ck;
-      const a = -1.15 * Math.log(1 - 0.985 * ck);
+      const a = 1.6 * (-Math.log(1 - 0.985 * ck) - 0.985 * ck);
       const ca = Math.cos(a) * k, sa = Math.sin(a) * k;
       let tx = cx * ca - cy * sa; cy = cx * sa + cy * ca; cx = tx; cz *= k;
       tx = qx * ca - qy * sa; qy = qx * sa + qy * ca; qx = tx; qz *= k;
@@ -516,7 +519,7 @@
   // A callout is a polyline (anchor … elbow … end) drawn on with a trim from the anchor, a node on
   // the anchor, an end tick, and a mono label (gray tag + bone value) sitting on the horizontal run.
   const CO = [
-    { t0: 0.10, t1: 0.38, tag: 'R', val: '330' },   // sphere radius (a dimension line from the centre)
+    { t0: 0.12, t1: 0.42, tag: 'R', val: '330' },   // sphere radius (a dimension line from the centre)
     { t0: 0.56, t1: 0.82, tag: 'N', val: '1400' },  // particle count, on the torus rim
     { t0: 1.00, t1: 1.28, tag: 'Z', val: '−760' }, // far plane, on the back ridge
   ];
@@ -622,11 +625,12 @@
       const ex = ax - 34, ey = ay - 34;
       drawCallout(ctx, lt, fr, CO[1], [[ax, ay], [ex, ey], [ex - 128, ey]], 0, -1);
     }
-    // 3 · far plane: tracks a point on the back ridge, left of centre
+    // 3 · far plane: the node tracks a point on the back ridge, left of centre; the label hangs
+    // off that point's ground line, so the type never bobs with the ridge
     if (lt > CO[2].t0 && lt < CO[2].t1 + 0.12) {
       const i = GRID[0 * COLS + 13];
       const ax = X0[i], ay = Y0[i];
-      const ex = ax - 44, ey = ay - 44;
+      const ex = BX[i] - 44, ey = BY[i] - 60;
       drawCallout(ctx, lt, fr, CO[2], [[ax, ay], [ex, ey], [ex - 128, ey]], 0, -1);
     }
   }
@@ -704,13 +708,16 @@
       }
 
       // ── burst: flash disc, screen-space shock rings, equatorial rings ──────
+      // The flash and the screen-space rings are flat graphics: they are timed by the OUTPUT frame
+      // (api.frameT), so each frame shows one crisp ring instead of a grey motion-blur smear.
+      const fb = detail === 1 && api.frameT != null ? api.frameT - api.start - T_BURST : tb;
       if (tb < 0.6) {
         // flash disc: the dot's energy, released on the cut frame. Solid on f450, then it opens
         // from the centre into a thinning ring (f451–452) that the particles fly out of.
-        const fu = seg(tb, 0, 0.034);
+        const fu = seg(fb, 0, 0.034);
         if (fu < 1) {
-          const ro = 120 + 60 * E.expoOut(seg(tb, 0, 0.05));
-          const ri = ro * E.expoOut(seg(tb, 0.009, 0.034));
+          const ro = 120 + 60 * E.expoOut(seg(fb, 0, 0.05));
+          const ri = ro * E.expoOut(seg(fb, 0.009, 0.034));
           ctx.globalAlpha = 1;
           ctx.fillStyle = P.bone;
           ctx.beginPath();
@@ -719,7 +726,7 @@
           ctx.fill();
         }
         // shock ring: bone, r 300 → 700 (half-way by f452), thinning and fading as it goes
-        const su = seg(tb, 0, 0.1);
+        const su = seg(fb, 0, 0.1);
         if (su < 1) {
           ctx.globalAlpha = Math.pow(1 - su, 1.2);
           ctx.strokeStyle = P.bone;
@@ -727,7 +734,7 @@
           ctx.beginPath(); ctx.arc(CX, CY, 300 + 400 * E.quadOut(su), 0, TAU); ctx.stroke();
         }
         // signal echo, a beat behind
-        const eu = seg(tb, 0.004, 0.12);
+        const eu = seg(fb, 0.004, 0.12);
         if (eu > 0 && eu < 1) {
           ctx.globalAlpha = 0.85 * Math.pow(1 - eu, 1.5);
           ctx.strokeStyle = P.signal;
@@ -755,7 +762,7 @@
           const q = clamp((sRel - 0.82) / 0.46); // depth tier: 0 far … 1 near
           let a, r;
           if (q < 0.5) { const u = q / 0.5; a = lerp(0.35, 0.7, u); r = lerp(1.2, 2.5, u); }
-          else { const u = (q - 0.5) / 0.5; a = lerp(0.7, 1, u); r = lerp(2.5, 4.3, u); }
+          else { const u = (q - 0.5) / 0.5; a = lerp(0.7, 1, u); r = lerp(2.5, 4.6, u); }
           r *= SZ[i];
           a *= clamp(0.62 + 0.4 * LIT[i], 0.78, 1);
           a = Math.min(1, a + 0.45 * flash * (1 - q));
@@ -820,7 +827,7 @@
           if (a <= 0.004) return;
           const heat = Math.max(smoothstep(0.12, 0.55, ck), heatT);
           ctx.globalAlpha = a;
-          ctx.lineWidth = lerp(1.3, 1.75, q) * (accent ? 1.35 : 1) * (1 - 0.35 * ck) * sizeK;
+          ctx.lineWidth = lerp(1.3, 1.9, q) * (accent ? 1.3 : 1) * (1 - 0.35 * ck) * sizeK;
           ctx.strokeStyle = accent ? P.signal : heat > 0.02 ? lutHeat[Math.round(heat * 15)] : P.bone;
           ctx.beginPath();
           const n = rowPts(r, rowSpan(r, t), X0, Y0, RP_X, RP_Y);
