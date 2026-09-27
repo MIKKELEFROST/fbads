@@ -44,6 +44,8 @@ html, body { background: #000; overflow: hidden; }
   margin: -0.1em -0.05em -0.16em;
 }
 .mask-in { display: inline-block; }
+/* shrink-wrapped text block, so its widest line can be measured and fitted */
+.fit { display: inline-block; white-space: nowrap; }
 .acc-orange { color: var(--orange); }
 .acc-yellow { color: var(--yellow); }
 .acc-paper { color: var(--paper); }
@@ -302,8 +304,10 @@ html, body { background: #000; overflow: hidden; }
 .s5-bar { position: absolute; top: 0; height: 100%; background: var(--ink); }
 .s5-glow { position: absolute; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 90, 31, 0.55), rgba(255, 90, 31, 0)); }
 .logo { position: absolute; left: 0; top: 0; display: flex; align-items: center; }
-.logo-mark-big { flex: none; }
+.logo-mark-big { flex: none; position: relative; z-index: 2; } /* the wordmark slides out from behind the mark */
 .wordmark {
+  position: relative;
+  z-index: 1;
   font-family: 'Archivo', sans-serif;
   font-weight: 800;
   letter-spacing: -0.045em;

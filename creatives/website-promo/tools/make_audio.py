@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Synthesises the 15 s soundtrack (128 BPM, D major) with every hit and sound effect locked to the
-same beat grid as the animation in src/main.js. Pure numpy/scipy — no samples, nothing to license.
+Synthesises the soundtrack (128 BPM, D major, 36 beats = 16.9 s) with every hit and sound effect
+locked to the same beat grid as the animation in src/main.js. Pure numpy/scipy — no samples, nothing
+to license. The soundtrack has no words, so it serves every language version.
 
     python3 tools/make_audio.py            # -> out/soundtrack.wav (48 kHz, 16-bit, ~-14 LUFS)
 
 Cue sheet (beats; 1 beat = 0.46875 s):
-   0-4   trade words        kick + snap on every word, Bm
-   4-8   5-star / not so much   breakdown: star blips, slide-whistle drop, snare roll + riser
-   8     hazard wipe + tape  DROP (D) — tape slams, rips at 9
-   9-16  the build           UI pops climb the chord, chip chimes, click at 14, morph whoosh
-  16-24  the calls           phone buzz + ringtone at 16.25, notification dings at 18.5..21.5
-  24-32  end card            logo impact at 24, CTA pop at 26.5, final chord at 30
+   0-4   trade words         kick + snap on every word, Bm
+   4-8   five stars          half-time breakdown (G): star blips on 16ths
+   8-12  not so many         tension (A): stars fall with a slide whistle, snare roll + riser
+  12     hazard wipe + tape  DROP (D) — tape slams, rips at 13
+  13-20  the build           UI pops climb the chord, chip chimes, click at 18, morph whoosh
+  20-28  the calls           phone buzz + ringtone at 20.25, notification dings at 22.5..25.5
+  28-36  end card            logo impact at 28, tagline at 30, CTA pop at 31, final chord at 34
 """
 import os
 import shutil
@@ -24,7 +26,8 @@ import scipy.signal as sg
 SR = 48000
 BPM = 128
 B = 60 / BPM
-DUR = 15.0
+BEATS = 36
+DUR = BEATS * B
 N = int(round(SR * DUR))
 rng = np.random.default_rng(128)
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -317,15 +320,19 @@ def shimmer(dur=0.5):
 CHORDS = [  # (start beat, end beat, pad voicing, bass root, arp tones)
     (0, 4, ['B3', 'D4', 'F#4'], 'B1', ['B4', 'D5', 'F#5', 'B5']),
     (4, 8, ['B3', 'D4', 'G4'], 'G1', ['G4', 'B4', 'D5', 'G5']),
-    (8, 12, ['A3', 'D4', 'F#4'], 'D2', ['D5', 'F#5', 'A5', 'D6']),
-    (12, 16, ['A3', 'C#4', 'E4'], 'A1', ['C#5', 'E5', 'A5', 'C#6']),
-    (16, 20, ['B3', 'D4', 'F#4'], 'B1', ['B4', 'D5', 'F#5', 'B5']),
-    (20, 22, ['B3', 'D4', 'G4'], 'G1', ['G4', 'B4', 'D5', 'G5']),
-    (22, 24, ['A3', 'C#4', 'E4'], 'A1', ['A4', 'C#5', 'E5', 'A5']),
-    (24, 28, ['A3', 'D4', 'F#4'], 'D2', ['D5', 'F#5', 'A5', 'D6']),
-    (28, 30, ['B3', 'D4', 'G4'], 'G1', ['G4', 'B4', 'D5', 'G5']),
-    (30, 32, ['A3', 'D4', 'F#4'], 'D2', ['D5', 'F#5', 'A5', 'D6']),
+    (8, 12, ['A3', 'C#4', 'E4'], 'A1', ['A4', 'C#5', 'E5', 'A5']),
+    (12, 16, ['A3', 'D4', 'F#4'], 'D2', ['D5', 'F#5', 'A5', 'D6']),
+    (16, 20, ['A3', 'C#4', 'E4'], 'A1', ['C#5', 'E5', 'A5', 'C#6']),
+    (20, 24, ['B3', 'D4', 'F#4'], 'B1', ['B4', 'D5', 'F#5', 'B5']),
+    (24, 26, ['B3', 'D4', 'G4'], 'G1', ['G4', 'B4', 'D5', 'G5']),
+    (26, 28, ['A3', 'C#4', 'E4'], 'A1', ['A4', 'C#5', 'E5', 'A5']),
+    (28, 32, ['A3', 'D4', 'F#4'], 'D2', ['D5', 'F#5', 'A5', 'D6']),
+    (32, 34, ['B3', 'D4', 'G4'], 'G1', ['G4', 'B4', 'D5', 'G5']),
+    (34, 36, ['A3', 'D4', 'F#4'], 'D2', ['D5', 'F#5', 'A5', 'D6']),
 ]
+BREAK = (4, 12)  # the problem scene: half-time groove, then tension into the drop
+DROP = 12
+FINAL = 34
 
 
 def chord_at(beat):
@@ -339,32 +346,34 @@ def up(notes, octaves=1):
     return [n[:-1] + str(int(n[-1]) + octaves) for n in notes]
 
 
-KICKS = [0, 1, 2, 3, 4] + list(range(8, 30))
-FULL = lambda beat: beat < 4 or 8 <= beat < 30  # noqa: E731  sections with the full groove
+KICKS = [0, 1, 2, 3] + [4, 5.5, 8] + list(range(DROP, FINAL))
+FULL = lambda beat: beat < BREAK[0] or DROP <= beat < FINAL  # noqa: E731  sections with the full groove
 
 # drums
 for k in KICKS:
-    place('drums', kick(), b(k), 0.95)
-place('drums', kick(1.3), b(30), 1.0)
-for c in [1, 3] + list(range(9, 30, 2)):
+    place('drums', kick(), b(k), 0.95 if FULL(k) else 0.8)
+place('drums', kick(1.3), b(FINAL), 1.0)
+for c in [1, 3] + [6] + list(range(DROP + 1, FINAL, 2)):
     place('drums', clap(), b(c), 0.42, 0.0, send=0.35)
 for i in range(4 * 2):  # bar 1: 8th hats
     place('drums', hat(), b(i * 0.5), 0.16 if i % 2 else 0.1, 0.25)
-for i in range(int(8 * 4), int(30 * 4)):  # bars 3-7(+): 16th hats with accents
+for i in range(4 * 2):  # half-time bar: softer 8th hats
+    place('drums', hat(), b(4 + i * 0.5), 0.09 if i % 2 else 0.05, 0.25)
+for i in range(DROP * 4, FINAL * 4):  # from the drop: 16th hats with accents
     beat = i / 4
     place('drums', hat(), b(beat), [0.13, 0.06, 0.1, 0.06][i % 4], 0.25)
-for beat in [x + 0.5 for x in range(0, 4)] + [x + 0.5 for x in range(8, 30)]:
+for beat in [x + 0.5 for x in range(0, 4)] + [x + 0.5 for x in range(DROP, FINAL)]:
     place('drums', hat(True), b(beat), 0.12, -0.2, send=0.1)
-# breakdown snare roll into the drop: 8ths, 16ths then 32nds, rising
-roll = [6 + i * 0.5 for i in range(2)] + [7 + i * 0.25 for i in range(2)] + [7.5 + i * 0.125 for i in range(4)]
+# snare roll into the drop: 8ths, 16ths then 32nds, rising
+roll = [10 + i * 0.5 for i in range(2)] + [11 + i * 0.25 for i in range(2)] + [11.5 + i * 0.125 for i in range(4)]
 for j, r in enumerate(roll):
     place('drums', snare(1 + 0.06 * j), b(r), 0.12 + 0.05 * j, 0.0, send=0.25)
-for cb in (8, 16, 24):
+for cb in (DROP, 20, 28):
     place('drums', crash(), b(cb), 0.22, 0.0, send=0.2)
-place('drums', crash(2.6), b(30), 0.3, 0.0, send=0.35)
+place('drums', crash(2.6), b(FINAL), 0.3, 0.0, send=0.35)
 
-# bass: off-beat 8ths + a pickup 16th, ducked by the kick
-for beat16 in range(0, 30 * 4):
+# bass: off-beat 8ths + a pickup 16th, ducked by the kick; long notes through the breakdown
+for beat16 in range(0, FINAL * 4):
     beat = beat16 / 4
     if not FULL(beat):
         continue
@@ -372,29 +381,31 @@ for beat16 in range(0, 30 * 4):
     pos = beat16 % 16
     if pos in (2, 6, 10, 14):
         place('bass', bass(c[3], 0.2), b(beat), 0.55)
-    elif pos == 15 and beat >= 8:
+    elif pos == 15 and beat >= DROP:
         place('bass', bass(c[3][:-1] + str(int(c[3][-1]) + 1), 0.1, 1.4), b(beat), 0.35)
-place('bass', bass('G1', 0.9), b(4), 0.5)            # breakdown sub under the stars
-place('bass', bass('D2', 1.0, 0.8), b(30), 0.6)      # final note
+place('bass', bass('G1', 1.6), b(4), 0.5)            # breakdown sub under the stars
+place('bass', bass('A1', 1.5), b(8), 0.45)           # ... and under "not so many"
+place('bass', bass('D2', 1.0, 0.8), b(FINAL), 0.6)   # final note
 
 # pads: bar by bar (darker in the breakdown, full afterwards)
 for s, e, notes, _, _ in CHORDS:
-    bright = 1100 if s == 4 else 2800
-    dur = b(e) - b(s)
-    place('music', pad(notes, dur, att=0.05 if s != 4 else 0.6, rel=0.9 if e == 32 else 0.25, bright=bright), b(s),
-          0.16 if s != 4 else 0.13, 0.0, send=0.25)
+    dark = BREAK[0] <= s < BREAK[1]
+    place('music', pad(notes, b(e) - b(s), att=0.6 if dark else 0.05, rel=0.9 if e == CHORDS[-1][1] else 0.25,
+                       bright=1100 if dark else 2800), b(s), 0.13 if dark else 0.16, 0.0, send=0.25)
 
-# plucks: on the words in bar 1, syncopated in the drop, accents on the end-card beats
-pl_beats = [0, 1, 2, 3]
-for bar in range(8, 24, 4):
+# plucks: on the words in bar 1, on each new line in the breakdown, syncopated in the drop,
+# accents on the end-card beats
+pl_beats = [0, 1, 2, 3, 4, 8]
+for bar in range(DROP, 28, 4):
     pl_beats += [bar + p for p in (0, 0.75, 1.5, 2.5, 3.25)]
-pl_beats += [24, 25.5, 26.5, 27.5, 28, 30]
+pl_beats += [28, 30, 31, 32, FINAL]
 for beat in pl_beats:
     notes = chord_at(beat)[2]
-    place('music', pluck(notes + up(notes[-1:]), 0.6 if beat < 24 else 1.1, 0.26 if beat < 24 else 0.5), b(beat), 0.34,
-          0.0, send=0.3)
+    long = beat >= 28
+    place('music', pluck(notes + up(notes[-1:]), 1.1 if long else 0.6, 0.5 if long else 0.26), b(beat),
+          0.26 if BREAK[0] <= beat < BREAK[1] else 0.34, 0.0, send=0.3)
 # arp: 16ths through the build and the calls (quiet, for motion)
-for i in range(8 * 4, 24 * 4):
+for i in range(DROP * 4, 28 * 4):
     beat = i / 4
     tones = chord_at(beat)[4]
     place('music', pluck([tones[i % 4]], 0.22, 0.09, 1.3, voices=1), b(beat), 0.085, 0.35 if i % 2 else -0.35, send=0.2)
@@ -407,70 +418,70 @@ for i in range(4):
         place('sfx', whoosh(0.22, 700, 4000, 0.8), b(i) - 0.19, 0.18, -0.3 + 0.2 * i)
 place('sfx', whoosh(0.34, 300, 5000, 0.92, 1.2), b(4) - 0.32, 0.4)
 place('sfx', boom(1.2, 80, 30, 0.35), b(4), 0.45)
-# S2: star blips climb, then the fall
+# S2: star blips climb; the lines swap at 8; the stars fall at 9
 for i, name in enumerate(('D6', 'E6', 'F#6', 'A6', 'B6')):
     place('sfx', blip(hz(name)), b(4) + 0.04 + i * B / 4, 0.26, -0.4 + 0.2 * i, send=0.3)
-place('sfx', whoosh(0.2, 1200, 5000, 0.6), b(6) - 0.02, 0.14)
-place('sfx', slide_whistle(), b(6.5), 0.2, 0.1, send=0.3)
+place('sfx', whoosh(0.2, 1200, 5000, 0.6), b(8) - 0.02, 0.14)
+place('sfx', slide_whistle(), b(9), 0.2, 0.1, send=0.3)
 for i, name in enumerate(('A5', 'F#5', 'D5', 'A4')):
-    place('sfx', blip(hz(name), 0.14, 1.2), b(6.5) + i * 0.06, 0.13, 0.1 + 0.15 * i)
-place('sfx', riser(b(8) - b(6.75)), b(6.75), 0.3, 0.0, send=0.2)
-place('sfx', whoosh(0.46, 250, 6000, 0.85, 1.0, tilt=0.8), b(7.55) - 0.02, 0.45)
+    place('sfx', blip(hz(name), 0.14, 1.2), b(9) + i * 0.06, 0.13, 0.1 + 0.15 * i)
+place('sfx', riser(b(DROP) - b(10.75)), b(10.75), 0.3, 0.0, send=0.2)
+place('sfx', whoosh(0.46, 250, 6000, 0.85, 1.0, tilt=0.8), b(11.55) - 0.02, 0.45)
 # DROP
-place('sfx', boom(1.8, 110, 30, 0.6), b(8), 0.75, 0.0, send=0.15)
-place('sfx', whoosh(0.4, 3000, 400, 0.15, 1.2, tilt=-0.9), b(8) - 0.02, 0.35)
-place('sfx', whoosh(0.4, 3000, 400, 0.15, 1.2, tilt=0.9), b(8) + 0.07, 0.3)
-place('sfx', rip(), b(9), 0.36, -0.45)
-place('sfx', rip(), b(9) + 0.05, 0.32, 0.45)
-place('sfx', whoosh(0.5, 150, 900, 0.3, 0.9), b(9), 0.3)
+place('sfx', boom(1.8, 110, 30, 0.6), b(DROP), 0.75, 0.0, send=0.15)
+place('sfx', whoosh(0.4, 3000, 400, 0.15, 1.2, tilt=-0.9), b(DROP) - 0.02, 0.35)
+place('sfx', whoosh(0.4, 3000, 400, 0.15, 1.2, tilt=0.9), b(DROP) + 0.07, 0.3)
+place('sfx', rip(), b(13), 0.36, -0.45)
+place('sfx', rip(), b(13) + 0.05, 0.32, 0.45)
+place('sfx', whoosh(0.5, 150, 900, 0.3, 0.9), b(13), 0.3)
 for i in range(8):  # wireframe boxes drawing on
-    place('sfx', tick(4500 + 400 * i, 0.03, 0.006), b(9.25) + i * 0.05, 0.12, -0.5 + i * 0.12)
+    place('sfx', tick(4500 + 400 * i, 0.03, 0.006), b(13.25) + i * 0.05, 0.12, -0.5 + i * 0.12)
 # the build: pops climb the chord tones
-for beat, name in [(10, 'D6'), (10.5, 'F#6'), (11, 'A6'), (11.5, 'D7'), (12, 'A5'), (12.38, 'C#6'), (12.5, 'E6'), (12.75, 'A6'), (13, 'C#7')]:
+for beat, name in [(14, 'D6'), (14.5, 'F#6'), (15, 'A6'), (15.5, 'D7'), (16, 'A5'), (16.38, 'C#6'), (16.5, 'E6'), (16.75, 'A6'), (17, 'C#7')]:
     place('sfx', pop(hz(name) / 2), b(beat), 0.34, 0.15, send=0.2)
 for i in range(5):
-    place('sfx', tick(9000, 0.02, 0.003), b(12) + i * B / 8, 0.09, 0.2)
-place('sfx', whoosh(0.7, 400, 3500, 0.5, 2.2), b(11) + 0.12, 0.12, 0.35)   # water through the pipes
-place('sfx', bloop(), b(11) + 0.55, 0.3, 0.35, send=0.3)
-for beat, name in [(10.25, 'F#6'), (11.25, 'A6'), (12.25, 'C#7'), (13.25, 'E7')]:  # feature chips
-    place('sfx', bell(hz(name), 1.0, 3.5, 1.6, 0.3), b(beat), 0.14, -0.5 if beat != 10.25 else 0.5, send=0.4)
+    place('sfx', tick(9000, 0.02, 0.003), b(16) + i * B / 8, 0.09, 0.2)
+place('sfx', whoosh(0.7, 400, 3500, 0.5, 2.2), b(15) + 0.12, 0.12, 0.35)   # water through the pipes
+place('sfx', bloop(), b(15) + 0.55, 0.3, 0.35, send=0.3)
+for beat, name in [(14.25, 'F#6'), (15.25, 'A6'), (16.25, 'C#7'), (17.25, 'E7')]:  # feature chips
+    place('sfx', bell(hz(name), 1.0, 3.5, 1.6, 0.3), b(beat), 0.14, -0.5 if beat != 14.25 else 0.5, send=0.4)
     place('sfx', pop(700), b(beat), 0.12, 0.0)
-place('sfx', whoosh(0.55, 800, 2500, 0.6, 1.5, tilt=0.5), b(13.3), 0.07)
+place('sfx', whoosh(0.55, 800, 2500, 0.6, 1.5, tilt=0.5), b(17.3), 0.07)
 for d in (0.0, 0.07):  # mouse click
-    place('sfx', tick(3500, 0.02, 0.0015), b(14) + d, 0.4, -0.2)
-place('sfx', whoosh(0.9, 250, 3200, 0.55, 1.0), b(14.3), 0.3, send=0.15)
-place('sfx', whoosh(0.4, 400, 5000, 0.9, 1.2), b(15.25), 0.3)
-place('sfx', boom(1.2, 90, 32, 0.3), b(16), 0.4)
+    place('sfx', tick(3500, 0.02, 0.0015), b(18) + d, 0.4, -0.2)
+place('sfx', whoosh(0.9, 250, 3200, 0.55, 1.0), b(18.3), 0.3, send=0.15)
+place('sfx', whoosh(0.4, 400, 5000, 0.9, 1.2), b(19.25), 0.3)
+place('sfx', boom(1.2, 90, 32, 0.3), b(20), 0.4)
 # S4: the phone rings — vibration buzz + ringtone — then notification dings
-for s, e in [(16.25, 17), (17.25, 18)]:
+for s, e in [(20.25, 21), (21.25, 22)]:
     place('sfx', buzz(b(e) - b(s)), b(s), 0.12, 0.3)
     for j, name in enumerate(('B5', 'D6', 'F#6')):
         place('sfx', marimba(hz(name)), b(s) + j * B / 4, 0.3, 0.3, send=0.25)
-place('sfx', whoosh(0.25, 2000, 600, 0.3), b(18.25) - 0.05, 0.12, 0.3)
-for beat in (18.5, 19.5, 20.5, 21.5):
-    n1, n2 = ('F#6', 'B6') if beat < 20 else ('D6', 'G6')
+place('sfx', whoosh(0.25, 2000, 600, 0.3), b(22.25) - 0.05, 0.12, 0.3)
+for beat in (22.5, 23.5, 24.5, 25.5):
+    n1, n2 = ('F#6', 'B6') if beat < 24 else ('D6', 'G6')
     place('sfx', bell(hz(n1), 0.9, 2.0, 1.2, 0.28), b(beat), 0.2, 0.1, send=0.3)
     place('sfx', bell(hz(n2), 1.1, 2.0, 1.2, 0.35), b(beat) + 0.09, 0.2, 0.1, send=0.3)
     place('sfx', whoosh(0.22, 900, 3000, 0.5), b(beat) - 0.03, 0.08, -0.2)
 # S5: bars drop, logo, CTA, final chord
-place('sfx', rev_cymbal(b(24) - b(22.5)), b(22.5), 0.25)
+place('sfx', rev_cymbal(b(28) - b(26.5)), b(26.5), 0.25)
 for i in range(8):
-    place('sfx', tick(2500 + 250 * i, 0.04, 0.01), b(23) - 0.02 + i * 0.03, 0.2, -0.7 + i * 0.2)
-place('sfx', boom(2.0, 120, 30, 0.6), b(24), 0.75, 0.0, send=0.2)
-place('sfx', whoosh(0.45, 300, 4000, 0.4, 1.0), b(24), 0.2)
-place('sfx', whoosh(0.35, 1500, 6000, 0.5, 1.4, tilt=0.7), b(24) + 0.5, 0.16)
-place('sfx', whoosh(0.3, 900, 4000, 0.5, 1.2), b(25.5) - 0.02, 0.1)
-place('sfx', pop(420), b(26.5), 0.4, 0.0, send=0.2)
-place('sfx', bell(hz('D7'), 1.2, 3.5, 1.5, 0.35), b(26.5) + 0.02, 0.12, 0.0, send=0.4)
-for beat in (28.2, 30.2):
+    place('sfx', tick(2500 + 250 * i, 0.04, 0.01), b(27) - 0.02 + i * 0.03, 0.2, -0.7 + i * 0.2)
+place('sfx', boom(2.0, 120, 30, 0.6), b(28), 0.75, 0.0, send=0.2)
+place('sfx', whoosh(0.45, 300, 4000, 0.4, 1.0), b(28), 0.2)
+place('sfx', whoosh(0.35, 1500, 6000, 0.5, 1.4, tilt=0.7), b(28) + 0.8, 0.16)
+place('sfx', whoosh(0.3, 900, 4000, 0.5, 1.2), b(30) - 0.02, 0.1)
+place('sfx', pop(420), b(31), 0.4, 0.0, send=0.2)
+place('sfx', bell(hz('D7'), 1.2, 3.5, 1.5, 0.35), b(31) + 0.02, 0.12, 0.0, send=0.4)
+for beat in (32.2, 34.2):
     place('sfx', shimmer(), b(beat), 0.07, 0.3, send=0.5)
-place('sfx', boom(2.2, 110, 30, 0.7), b(30), 0.7, 0.0, send=0.3)
+place('sfx', boom(2.2, 110, 30, 0.7), b(FINAL), 0.7, 0.0, send=0.3)
 
 # ------------------------------------------------------------------ mix
 # sidechain: duck the tonal buses under every kick
 duck = np.ones(N)
 t_all = np.arange(N) / SR
-for k in KICKS + [30]:
+for k in KICKS + [FINAL]:
     t0 = b(k)
     i0 = int(t0 * SR)
     seg = t_all[i0:] - t0
@@ -489,7 +500,7 @@ verb = np.stack([sg.fftconvolve(BUS['send'][c], ir[c])[:N] for c in range(2)]) *
 GAINS = {'drums': 0.75, 'bass': 1.1, 'music': 1.5, 'sfx': 1.15}
 mixed = sum(BUS[k] * g for k, g in GAINS.items()) + verb
 mixed = hp(mixed, 28, 2)
-mixed[:, -int(0.25 * SR):] *= np.linspace(1, 0, int(0.25 * SR)) ** 1.5  # clean tail to silence at 15.0 s
+mixed[:, -int(0.25 * SR):] *= np.linspace(1, 0, int(0.25 * SR)) ** 1.5  # clean tail to silence at the very end
 
 
 def limit(x, ceiling=0.89, look=0.004, release=0.05):

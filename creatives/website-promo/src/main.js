@@ -1,13 +1,13 @@
 /*
- * Website promo — 15 s motion graphic.
+ * Website promo — 16.9 s motion graphic (all copy comes from config.js / config.en.js).
  * Every visual is a pure function of time: __seek(t) lays out the frame at t seconds.
- * Beat grid: 128 BPM → b(n) is the time of beat n (32 beats = 15 s).
+ * Beat grid: 128 BPM → b(n) is the time of beat n (36 beats = 16.875 s).
  *
- *  0.00  S1  trade call-out, one word per beat
- *  1.88  S2  "You do 5-star work." → "Your website? Not so much."
- *  3.75  S3  hazard wipe + tape, then the site is built on a blueprint
- *  7.50  S4  browser morphs into a phone; "You get the calls." + notifications
- * 11.25  S5  logo, tagline, CTA
+ *  0.00  S1  trade call-out, one word per beat                        (beats 0-4)
+ *  1.88  S2  "five stars" … "your website? not so many"               (beats 4-12)
+ *  5.63  S3  hazard wipe + tape, then the site is built on a blueprint  (beats 12-20)
+ *  9.38  S4  browser morphs into a phone; "you get the calls"         (beats 20-28)
+ * 13.13  S5  logo, tagline, CTA                                        (beats 28-36)
  */
 (function () {
   'use strict';
@@ -21,9 +21,9 @@
   const P = q.get('format') === 'portrait';
   const W = P ? 1080 : 1920;
   const H = P ? 1920 : 1080;
-  const DUR = 15;
   const B = 60 / 128;
   const b = (n) => n * B;
+  const DUR = b(36);
 
   document.body.classList.add(P ? 'portrait' : 'landscape');
   const rs = document.documentElement.style;
@@ -88,7 +88,7 @@
       .map((line) => line.map((tk) => (tk.a ? `<span class="${accCls}">${esc(tk.w)}</span>` : esc(tk.w))).join(' '))
       .join('<br>');
   }
-  // rise in at tIn (staggered), rise out at tOut
+  // rise in at tIn (staggered), rise out at tOut. 140% clears descenders (j, g) and accents (å) past the mask
   function rise(t, list, tIn, tOut = Infinity, o = {}) {
     const st = o.stagger != null ? o.stagger : 0.065;
     const d = o.dur || 0.55;
@@ -96,8 +96,8 @@
     const dOut = o.outDur || 0.3;
     list.forEach((w, i) => {
       const y = t < tOut
-        ? (1 - E.outExpo(prog(t, tIn + i * st, d))) * 110
-        : -E.inQuart(prog(t, tOut + i * so, dOut)) * 110;
+        ? (1 - E.outExpo(prog(t, tIn + i * st, d))) * 140
+        : -E.inQuart(prog(t, tOut + i * so, dOut)) * 140;
       w.style.transform = `translateY(${y.toFixed(3)}%)`;
     });
   }
@@ -117,6 +117,13 @@
     node.style.fontSize = size + 'px';
     const w = node.scrollWidth;
     if (w > maxW) node.style.fontSize = (size * maxW) / w + 'px';
+  }
+  // shrink a container's font-size until its inline-block content (one or more lines) fits maxW
+  function fitInline(container, inner, maxW, size) {
+    container.style.fontSize = size + 'px';
+    const w = inner.offsetWidth;
+    if (w > maxW) container.style.fontSize = (size * maxW) / w + 'px';
+    return parseFloat(container.style.fontSize);
   }
   // decaying pulse on every beat from `from` onwards (0..1)
   function beatPulse(t, from, decay = 7) {
@@ -278,11 +285,12 @@
     return { build, render };
   })();
 
-  // =============================================== S2 · the problem (b4 → b8)
+  // ============================== S2 · the problem (b4 → b12): five stars, then not so many
   const S2 = (() => {
     const root = layer(20, 's2');
-    const box = el('div', 's2-stars', root);
-    const n = 5, size = P ? 104 : 96, gap = P ? 26 : 26;
+    const wrap = el('div', 'layer', root); // everything in the scene, for a slow push-in
+    const box = el('div', 's2-stars', wrap);
+    const n = 5, size = P ? 104 : 96, gap = 26;
     const rowW = n * size + (n - 1) * gap;
     const rowY = P ? 660 : 300;
     // each star = a static outline "slot" + the filled star that pops in (and later falls off)
@@ -292,22 +300,31 @@
       slot.style.width = slot.style.height = fly.style.width = fly.style.height = size + 'px';
       return { slot, fly, x: (W - rowW) / 2 + i * (size + gap), y: rowY - size / 2 };
     });
-    const lineA = el('div', 's2-line', root);
-    const aW = words(lineA, CFG.fiveStar, 'acc-yellow');
-    const lineB = el('div', 's2-line', root);
-    const b1 = words(lineB, CFG.website);
-    el('br', null, lineB);
-    const b2 = words(lineB, CFG.notSoMuch, 'acc-orange');
+    const lineA = el('div', 's2-line', wrap);
+    const inA = el('span', 'fit', lineA);
+    const aW = words(inA, CFG.fiveStar, 'acc-yellow');
+    const lineB = el('div', 's2-line', wrap);
+    const inB = el('span', 'fit', lineB);
+    const b1 = words(inB, CFG.website);
+    el('br', null, inB);
+    const b2 = words(inB, CFG.notSoMuch, 'acc-orange');
 
     function build() {
-      lineA.style.top = (P ? 850 : 470) + 'px';
-      lineB.style.top = (P ? 850 : 430) + 'px';
+      // one font size for both lines so the swap doesn't jump, centred on the same point
+      const maxW = W - (P ? 110 : 240), base = P ? 128 : 132;
+      const fs = Math.min(fitInline(lineA, inA, maxW, base), fitInline(lineB, inB, maxW, base));
+      const cy = P ? 980 : 562;
+      [lineA, lineB].forEach((l) => {
+        l.style.fontSize = fs + 'px';
+        l.style.top = px(cy - l.offsetHeight / 2);
+      });
     }
-    const tOn = b(4) + 0.02, tFall = b(6.5);
+    const tOn = b(4) + 0.02, tSwap = b(8), tFall = b(9);
     function render(t) {
-      const on = t >= tOn && t < b(8) + 0.02;
+      const on = t >= tOn && t < b(12) + 0.02;
       show(root, on);
       if (!on) return;
+      wrap.style.transform = `scale(${(1 + 0.035 * E.inOutSine(prog(t, b(4), b(12) - b(4)))).toFixed(5)})`;
       stars.forEach((s, i) => {
         const ts = b(4) + 0.04 + i * (B / 4);
         const sp = spring(t - ts, 3.0, 0.42);
@@ -333,8 +350,8 @@
         s.fly.style.opacity = o;
       });
       // line A clears out just before line B rises into the same spot, so the two never overlap
-      rise(t, aW, b(4) + 0.03, b(6) - 0.1, { stagger: 0.07, outStagger: 0.02, outDur: 0.16 });
-      rise(t, b1, b(6) + 0.05, Infinity, { stagger: 0.07 });
+      rise(t, aW, b(4) + 0.03, tSwap - 0.1, { stagger: 0.07, outStagger: 0.02, outDur: 0.16 });
+      rise(t, b1, tSwap + 0.05, Infinity, { stagger: 0.07 });
       rise(t, b2, tFall + 0.02, Infinity, { stagger: 0.08 });
       // a small "womp" shake on the punchline
       const tau = t - tFall - 0.25;
@@ -389,8 +406,8 @@
   function desktopHTML() {
     return `
       <nav class="d-nav" data-b="nav">${logoHTML()}
-        <div class="d-links"><span>Services</span><span>Pricing</span><span>Reviews</span><span>Areas</span></div>
-        <div class="d-nav-r"><span class="d-hotline">${ico('phone')}24/7 hotline</span><span class="btn btn-o">Book now</span></div>
+        <div class="d-links">${D.nav.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
+        <div class="d-nav-r"><span class="d-hotline">${ico('phone')}${esc(D.hotline)}</span><span class="btn btn-o">${esc(D.navCta)}</span></div>
       </nav>
       <section class="d-hero">
         <div class="d-hero-l">
@@ -401,12 +418,12 @@
           <div class="d-trust" data-b="trust">${stars5()}<b>${esc(D.rating)}</b>${esc(D.reviews)}<i class="sep"></i><span class="shield">${ico('shield-check')}</span>${esc(D.insured)}</div>
         </div>
         <div class="hero-img" data-b="img">${heroSVG('d')}
-          <div class="rating-chip">${starSvg('currentColor', 'currentColor', 1)}<span>${esc(D.rating)} on Google</span></div>
+          <div class="rating-chip">${starSvg('currentColor', 'currentColor', 1)}<span>${esc(D.ratingChip)}</span></div>
           <div class="badge"><span class="ck">${ico('check')}</span>${esc(D.badge)}</div>
         </div>
       </section>
       <section class="d-services">
-        <div class="d-sec-h" data-b="sech"><b>Our services</b><span>See all services</span></div>
+        <div class="d-sec-h" data-b="sech"><b>${esc(D.servicesTitle)}</b><span>${esc(D.servicesAll)}</span></div>
         <div class="d-cards">${D.services.map(cardHTML).join('')}</div>
       </section>`;
   }
@@ -415,7 +432,7 @@
       <div class="m-status"><b>9:41</b><span class="m-status-r">${ico('signal')}${ico('wifi')}${ico('battery-full')}</span></div>
       <div class="m-nav">${logoHTML()}<span class="m-menu">${ico('menu')}</span></div>
       <div class="m-hero">
-        <div class="eyebrow"><i class="dot"></i>${esc(D.eyebrow.split(' · ')[0])}</div>
+        <div class="eyebrow"><i class="dot"></i>${esc(D.eyebrowShort)}</div>
         <h1 class="h1">${rich(D.h1.replace(/[|\n]/g, ' '), 'acc-site')}</h1>
         <p class="m-lead">${esc(D.lead)}</p>
         <div class="m-trust">${stars5()}<b>${esc(D.rating)}</b>${esc(D.reviews)}</div>
@@ -424,7 +441,7 @@
         <div class="rating-chip">${starSvg('currentColor', 'currentColor', 1)}<span>${esc(D.rating)}</span></div>
       </div>
       <div class="m-cards">${D.services.slice(0, 2).map(cardHTML).join('')}</div>
-      <div class="m-sticky"><span class="btn btn-line">${ico('phone')}Call</span><span class="btn btn-o">${ico('calendar-check')}${esc(D.book)}</span></div>
+      <div class="m-sticky"><span class="btn btn-line">${ico('phone')}${esc(D.callShort)}</span><span class="btn btn-o">${ico('calendar-check')}${esc(D.book)}</span></div>
       <div class="m-call">
         <span class="av">${ico('user')}</span>
         <span class="who"><b>${esc(CFG.caller.name)}</b><span>${esc(CFG.caller.note)}</span></span>
@@ -460,8 +477,8 @@
 
     // build order (seconds) for each block of the desktop page
     const T = {
-      nav: b(10), eyebrow: b(10.5) - 0.05, h1: b(10.5), lead: b(10.5) + 0.3, img: b(11), cta: b(11.5),
-      trust: b(12), sech: b(12.5) - 0.12, card0: b(12.5), card1: b(12.75), card2: b(13),
+      nav: b(14), eyebrow: b(14.5) - 0.05, h1: b(14.5), lead: b(14.5) + 0.3, img: b(15), cta: b(15.5),
+      trust: b(16), sech: b(16.5) - 0.12, card0: b(16.5), card1: b(16.75), card2: b(17),
     };
     const blocks = {};
     siteD.querySelectorAll('[data-b]').forEach((n) => (blocks[n.dataset.b] = n));
@@ -476,7 +493,7 @@
         const rs = nodes.map((n) => n.getBoundingClientRect());
         const x0 = Math.min(...rs.map((r) => r.left)), y0 = Math.min(...rs.map((r) => r.top));
         const x1 = Math.max(...rs.map((r) => r.right)), y1 = Math.max(...rs.map((r) => r.bottom));
-        const w = el('div', 'wire', siteD, `<span>${label}</span>`);
+        const w = el('div', 'wire', siteD, `<span>${esc(label)}</span>`);
         const pad = 6;
         Object.assign(w.style, {
           left: px((x0 - sr.left) * k - pad), top: px((y0 - sr.top) * k - pad),
@@ -485,14 +502,14 @@
         return w;
       };
       const plan = [
-        ['nav', [blocks.nav], 'NAV'],
-        ['h1', [blocks.eyebrow, h1, blocks.lead], 'HEADLINE'],
-        ['img', [blocks.img], 'IMAGE'],
-        ['cta', [blocks.cta], 'CTA'],
-        ['trust', [blocks.trust], 'REVIEWS'],
-        ['card0', [blocks.card0], 'SERVICE'],
-        ['card1', [blocks.card1], 'SERVICE'],
-        ['card2', [blocks.card2], 'SERVICE'],
+        ['nav', [blocks.nav], D.wires.nav],
+        ['h1', [blocks.eyebrow, h1, blocks.lead], D.wires.h1],
+        ['img', [blocks.img], D.wires.img],
+        ['cta', [blocks.cta], D.wires.cta],
+        ['trust', [blocks.trust], D.wires.trust],
+        ['card0', [blocks.card0], D.wires.card],
+        ['card1', [blocks.card1], D.wires.card],
+        ['card2', [blocks.card2], D.wires.card],
       ];
       plan.forEach(([key, nodes, label], i) => wires.push({ key, w: box(nodes, label), i }));
       pipeLen = pipes[0].getTotalLength();
@@ -521,10 +538,10 @@
     const G = P
       ? { bx: 540, by: 940, bw: 960, bh: 660, bar: 40, px: 540, py: 1292, pw: 470, ph: 964, pr: 74, pbz: 15 }
       : { bx: 1062, by: 612, bw: 1200, bh: 750, bar: 46, px: 1480, py: 548, pw: 400, ph: 820, pr: 64, pbz: 13 };
-    const tAppear = b(9), tMorph0 = b(14.3), tMorph1 = b(16) - 0.02;
+    const tAppear = b(13), tMorph0 = b(18.3), tMorph1 = b(20) - 0.02;
 
     function render(t) {
-      const on = t >= tAppear && t < b(24) + 0.05;
+      const on = t >= tAppear && t < b(28) + 0.05;
       show(cam, on);
       if (!on) return;
       // --- geometry
@@ -578,14 +595,14 @@
       Object.assign(home.style, { width: px(134 * mS), height: px(5 * mS), bottom: px(8 * mS), marginLeft: px(-67 * mS), opacity: io });
       url.style.minWidth = px(Math.min(360, w * 0.36));
       // --- dimension marks
-      const dimO = E.outCubic(prog(t, b(9.3), 0.4)) * (1 - prog(t, b(14.1), 0.25));
+      const dimO = E.outCubic(prog(t, b(13.3), 0.4)) * (1 - prog(t, b(18.1), 0.25));
       dims.style.opacity = dimO;
       show(dims, dimO > 0);
       if (dimO > 0) layoutDims(w, h);
       // --- build the desktop page
       if (dO > 0) {
         wires.forEach((x) => {
-          const tin = b(9.25) + x.i * 0.05;
+          const tin = b(13.25) + x.i * 0.05;
           const p = E.outExpo(prog(t, tin, 0.45));
           const out = prog(t, T[x.key], 0.18);
           x.w.style.clipPath = `inset(0 ${((1 - p) * 100).toFixed(2)}% 0 0)`;
@@ -648,7 +665,7 @@
       wheels.forEach((wh) => wh.setAttribute('transform', `rotate(${((t - T.img) * 140).toFixed(2)})`));
       // --- phone: incoming call banner
       const cIn = spring(t - RING.t0 + 0.04, 2.4, 0.62);
-      const cOut = E.inBack(prog(t, b(18.25) - 0.05, 0.26));
+      const cOut = E.inBack(prog(t, b(22.25) - 0.05, 0.26));
       call.style.transform = `translateY(${px(-150 * (1 - cIn) - 160 * cOut)})`;
       show(call, t > RING.t0 - 0.08 && cOut < 1);
     }
@@ -657,9 +674,9 @@
       get geom() { return G; },
     };
   })();
-  const CLICK = b(14);
+  const CLICK = b(18);
 
-  // ============================================ S3 · the build (b8 → b16)
+  // ============================================ S3 · the build (b12 → b20)
   const S3 = (() => {
     const bg = layer(30, 's3');
     const grid = el('div', 's3-grid', bg);
@@ -688,7 +705,7 @@
       dot.setAttribute('stroke-width', 4);
       leaders.appendChild(line);
       leaders.appendChild(dot);
-      return { ...c, n, line, dot, i, t0: b(10.25 + i) };
+      return { ...c, n, line, dot, i, t0: b(14.25 + i) };
     });
     const cursor = el('div', 'cursor', fg, `<svg class="ic" viewBox="0 0 24 24" fill="${INK}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round">${ICONS['mouse-pointer-2']}</svg>`);
     const ripples = [el('div', 'ripple', fg), el('div', 'ripple', fg)];
@@ -701,8 +718,8 @@
       return `<div class="tape-strip">${s}</div>`;
     };
     const tapes = [
-      { n: el('div', 'tape tape-a', tapeL, tapeText()), ang: P ? -11 : -7.5, y: P ? 0.43 : 0.43, dir: 1, t0: b(8) - 0.02 },
-      { n: el('div', 'tape tape-b', tapeL, tapeText()), ang: P ? 9 : 6, y: P ? 0.56 : 0.6, dir: -1, t0: b(8) + 0.07 },
+      { n: el('div', 'tape tape-a', tapeL, tapeText()), ang: P ? -11 : -7.5, y: P ? 0.43 : 0.43, dir: 1, t0: b(12) - 0.02 },
+      { n: el('div', 'tape tape-b', tapeL, tapeText()), ang: P ? 9 : 6, y: P ? 0.56 : 0.6, dir: -1, t0: b(12) + 0.07 },
     ];
     const tapeH = P ? 124 : 120;
     tapes.forEach((tp) => {
@@ -712,10 +729,13 @@
     });
 
     function build() {
-      const fs = P ? 138 : 112;
-      head.style.fontSize = fs + 'px';
-      if (P) { head.style.left = '0px'; head.style.width = W + 'px'; head.style.textAlign = 'center'; head.style.top = '300px'; }
-      else { head.style.left = '112px'; head.style.top = '98px'; }
+      if (P) {
+        fitWidth(head, W - 120, 138);
+        Object.assign(head.style, { left: px((W - head.offsetWidth) / 2), top: '300px' });
+      } else {
+        fitWidth(head, 1150, 112);
+        Object.assign(head.style, { left: '112px', top: '98px' });
+      }
       chips.forEach((c) => { c.w = c.n.offsetWidth; c.h = c.n.offsetHeight; });
     }
 
@@ -746,28 +766,28 @@
 
     function render(t) {
       // background + wipe from S2
-      const onBg = t >= b(7.4) && t < b(16) + 0.05;
+      const onBg = t >= b(11.4) && t < b(20) + 0.05;
       show(bg, onBg);
       const k = (H / 2) * Math.tan((16 * Math.PI) / 180);
       const bw = P ? 200 : 250;
-      const wp = E.inOutCubic(prog(t, b(7.55), b(8) - b(7.55)));
+      const wp = E.inOutCubic(prog(t, b(11.55), b(12) - b(11.55)));
       const xe = lerp(-k - bw - 40, W + k + 40, wp);
       if (onBg) {
         bg.style.clipPath = wp < 1 ? `polygon(-10px -10px, ${px(xe + k)} -10px, ${px(xe - k)} ${H + 10}px, -10px ${H + 10}px)` : 'none';
-        grid.style.transform = `translate(${px(-(t - b(8)) * 16)},${px(-(t - b(8)) * 9)})`;
+        grid.style.transform = `translate(${px(-(t - b(12)) * 16)},${px(-(t - b(12)) * 9)})`;
       }
       const onBand = wp > 0 && wp < 1;
       show(bandL, onBand);
       if (onBand) band.style.clipPath = `polygon(${px(xe + k)} 0, ${px(xe + k + bw)} 0, ${px(xe - k + bw)} ${H}px, ${px(xe - k)} ${H}px)`;
 
       // tapes slam in on the drop, then tear away as the build starts
-      const onTape = t >= tapes[0].t0 && t < b(9.6);
+      const onTape = t >= tapes[0].t0 && t < b(13.6);
       show(tapeL, onTape);
       if (onTape) {
         tapes.forEach((tp, i) => {
           const len = 3400;
           const inP = E.outExpo(prog(t, tp.t0, 0.42));
-          const outP = E.inQuart(prog(t, b(9) + i * 0.05, 0.34));
+          const outP = E.inQuart(prog(t, b(13) + i * 0.05, 0.34));
           const along = tp.dir * (-(1 - inP) * 3600 + outP * 3600);
           const a = (tp.ang * Math.PI) / 180;
           const cx = W / 2 + Math.cos(a) * along, cy = H * tp.y + Math.sin(a) * along;
@@ -777,14 +797,14 @@
       }
 
       // headline, chips, cursor
-      const onFg = t >= b(9) && t < b(15);
+      const onFg = t >= b(13) && t < b(19);
       show(fg, onFg);
       if (!onFg) return;
-      rise(t, headW, b(9) + 0.02, b(14.2), { stagger: 0.08 });
+      rise(t, headW, b(13) + 0.02, b(18.2), { stagger: 0.08 });
       const dr = rectOf(DEV.dev);
       chips.forEach((c) => {
         const inT = t - c.t0;
-        const outP = E.inBack(prog(t, b(14.05) + c.i * 0.04, 0.3));
+        const outP = E.inBack(prog(t, b(18.05) + c.i * 0.04, 0.3));
         const vis = inT > 0 && outP < 1;
         show(c.n, vis);
         const pl = vis ? chipPlace(c, dr) : null;
@@ -812,18 +832,18 @@
         }
       });
       // cursor glides in and clicks "Book online"
-      const cOn = t > b(13.3) && t < b(14.7);
+      const cOn = t > b(17.3) && t < b(18.7);
       show(cursor, cOn);
       if (cOn) {
         const r = rectOf(DEV.book);
         const tx = r.cx + 8, ty = r.cy + 6;
-        const mp = prog(t, b(13.3), b(13.95) - b(13.3));
+        const mp = prog(t, b(17.3), b(17.95) - b(17.3));
         const x = lerp(W + 40, tx, E.outCubic(mp));
         const y = lerp(H + 60, ty, E.inOutSine(mp) * 0.4 + E.outQuart(mp) * 0.6);
         const cs = kf(t, [[CLICK - 0.03, 1], [CLICK + 0.04, 0.82, E.outQuad], [CLICK + 0.25, 1, E.outBack]]);
         const tipX = (4.04 / 24) * 58, tipY = (4.69 / 24) * 58;
         cursor.style.transform = `translate(${px(x - tipX)},${px(y - tipY)}) scale(${cs.toFixed(4)})`;
-        cursor.style.opacity = 1 - prog(t, b(14.35), 0.2);
+        cursor.style.opacity = 1 - prog(t, b(18.35), 0.2);
       }
       ripples.forEach((rp, i) => {
         const p = prog(t, CLICK + i * 0.09, 0.5);
@@ -840,11 +860,11 @@
     return { build, render };
   })();
 
-  // ============================================ S4 · the calls (b16 → b24)
+  // ============================================ S4 · the calls (b20 → b28)
   // the phone rings in two vibration bursts (the soundtrack uses the same times)
   const RING = (() => {
-    const t0 = b(16.25);
-    const bursts = [[b(16.25), b(17)], [b(17.25), b(18)]];
+    const t0 = b(20.25);
+    const bursts = [[b(20.25), b(21)], [b(21.25), b(22)]];
     const env = (t) => {
       let e = 0;
       bursts.forEach(([a, z]) => (e = Math.max(e, clamp((t - a) / 0.04) * (1 - clamp((t - z) / 0.06)))));
@@ -879,8 +899,8 @@
       });
     });
     const cards = CFG.notifications.map((nf, i) => {
-      const n = el('div', 'notif', fg, `<span class="ni" style="background:${nf.color}">${nf.icon === 'star' ? starSvg('#fff', '#fff', 1.5) : ico(nf.icon)}</span><div class="nb"><div class="nt"><b>${esc(nf.title)}</b><span class="now">now</span></div><p>${esc(nf.body)}</p></div>`);
-      return { n, t0: b(18.5 + i) };
+      const n = el('div', 'notif', fg, `<span class="ni" style="background:${nf.color}">${nf.icon === 'star' ? starSvg('#fff', '#fff', 1.5) : ico(nf.icon)}</span><div class="nb"><div class="nt"><b>${esc(nf.title)}</b><span class="now">${esc(CFG.now)}</span></div><p>${esc(nf.body)}</p></div>`);
+      return { n, t0: b(22.5 + i) };
     });
     let cardW = 0, cardH = 0;
     const G = DEV.geom;
@@ -900,12 +920,12 @@
       cardH = cards[0].n.offsetHeight;
     }
     function render(t) {
-      const on = t >= b(15.2) && t < b(24) + 0.05;
+      const on = t >= b(19.2) && t < b(28) + 0.05;
       show(bgL, on);
-      show(fg, on && t > b(16.2));
+      show(fg, on && t > b(20.2));
       if (!on) return;
-      circle.style.transform = `scale(${E.inOutCubic(prog(t, b(15.25), b(16) - b(15.25))).toFixed(5)})`;
-      rise(t, headW, b(16) + 0.02, Infinity, { stagger: 0.08 });
+      circle.style.transform = `scale(${E.inOutCubic(prog(t, b(19.25), b(20) - b(19.25))).toFixed(5)})`;
+      rise(t, headW, b(20) + 0.02, Infinity, { stagger: 0.08 });
       // ring arcs beside the phone
       const e = RING.env(t);
       const pr = rectOf(DEV.dev);
@@ -942,7 +962,7 @@
     return { build, render };
   })();
 
-  // ============================================ S5 · end card (b24 → 15 s)
+  // ============================================ S5 · end card (b28 → b36)
   const S5 = (() => {
     const root = layer(70, 's5');
     const nBars = P ? 6 : 8;
@@ -966,7 +986,8 @@
     const lds = [...logo.querySelectorAll('.ld')];
     const wm = logo.querySelector('.wordmark');
     const tag = el('div', 'tagline', content);
-    const tagW = words(tag, CFG.brand.tagline);
+    const tagIn = el('span', 'fit', tag);
+    const tagW = words(tagIn, CFG.brand.tagline);
     const cta = el('div', 'cta', content, `<span>${esc(CFG.brand.cta)}</span><span class="arrow">${ico('arrow-right')}</span><i class="shine"></i>`);
     const arrow = cta.querySelector('.arrow');
     const shine = cta.querySelector('.shine');
@@ -987,7 +1008,7 @@
       L.cy = P ? 720 : 400;
       L.x = (W - L.logoW) / 2;
       roof.style.strokeDasharray = 90;
-      tag.style.fontSize = (P ? 96 : 70) + 'px';
+      fitInline(tag, tagIn, W - (P ? 120 : 200), P ? 96 : 70);
       tag.style.top = px(L.cy + (P ? 150 : 128));
       cta.style.fontSize = (P ? 46 : 36) + 'px';
       cta.style.padding = P ? '34px 54px' : '26px 44px';
@@ -1006,25 +1027,25 @@
       Object.assign(glow.style, { width: px(gs), height: px(gs), left: px(W / 2 - gs / 2), top: px(L.cy - gs / 2 + 40) });
     }
     function render(t) {
-      const on = t >= b(23) - 0.05;
+      const on = t >= b(27) - 0.05;
       show(root, on);
       if (!on) return;
-      const tb0 = b(23) - 0.02;
+      const tb0 = b(27) - 0.02;
       bars.forEach((bar, i) => {
         const p = E.inOutCubic(prog(t, tb0 + i * 0.03, 0.26));
         bar.style.transform = `scaleY(${p.toFixed(5)})`;
       });
-      const full = t >= b(24) - 0.01;
+      const full = t >= b(28) - 0.01;
       root.style.background = full ? INK : 'transparent';
       bars.forEach((bar) => show(bar, !full));
-      show(content, t >= b(24) - 0.05);
-      if (t < b(24) - 0.05) return;
+      show(content, t >= b(28) - 0.05);
+      if (t < b(28) - 0.05) return;
 
-      const t0 = b(24);
+      const t0 = b(28);
       // logo mark springs in at centre, then slides left as the wordmark wipes on
       const sp = spring(t - t0, 2.2, 0.5);
       const slide = E.inOutQuart(prog(t, t0 + 0.42, 0.55));
-      const bump = t > b(30) ? Math.sin(Math.min(1, (t - b(30)) / 0.3) * Math.PI) * 0.05 : 0;
+      const bump = t > b(34) ? Math.sin(Math.min(1, (t - b(34)) / 0.3) * Math.PI) * 0.05 : 0;
       const centreX = (W - markSize) / 2;
       const mx = lerp(centreX - L.x, 0, slide);
       mark.style.transform = `translateX(${px(mx)}) scale(${(Math.max(0, sp) * (1 + bump)).toFixed(4)}) rotate(${((1 - sp) * -120).toFixed(2)}deg)`;
@@ -1035,30 +1056,30 @@
         d.style.transformOrigin = 'center';
         d.style.transform = `scale(${Math.max(0, s).toFixed(4)})`;
       });
-      const wp = E.outExpo(prog(t, t0 + 0.5, 0.7));
+      const wp = E.outExpo(prog(t, t0 + 0.8, 0.7)); // starts once the mark has almost cleared the way
       wm.style.clipPath = `inset(-20% ${((1 - wp) * 100).toFixed(2)}% -20% 0)`;
       wm.style.transform = `translateX(${px((1 - wp) * -60)}) scale(${1 + bump * 0.6})`;
       logo.style.transform = `translate(${px(L.x)},${px(L.cy - L.logoH / 2)})`;
       // glow pulses with the beat
       const gp = E.outCubic(prog(t, t0, 0.8));
-      glow.style.opacity = (gp * (0.32 + 0.14 * beatPulse(t, t0, 6) + (t > b(30) ? 0.25 * Math.exp(-(t - b(30)) * 3) : 0))).toFixed(4);
+      glow.style.opacity = (gp * (0.32 + 0.14 * beatPulse(t, t0, 6) + (t > b(34) ? 0.25 * Math.exp(-(t - b(34)) * 3) : 0))).toFixed(4);
       glow.style.transform = `scale(${(0.6 + 0.4 * gp).toFixed(4)})`;
       // tagline + CTA
-      rise(t, tagW, b(25.5), Infinity, { stagger: 0.06 });
-      const cp = spring(t - b(26.5), 2.4, 0.5);
-      const nudge = t > b(27.5) ? (1 - E.outCubic(clamp(((t - b(27.5)) % B) / 0.32))) * 9 : 0;
+      rise(t, tagW, b(30), Infinity, { stagger: 0.06 });
+      const cp = spring(t - b(31), 2.4, 0.5);
+      const nudge = t > b(32) ? (1 - E.outCubic(clamp(((t - b(32)) % B) / 0.32))) * 9 : 0;
       arrow.style.transform = `translateX(${px(nudge)})`;
-      cta.style.opacity = clamp((t - b(26.5)) / 0.1);
+      cta.style.opacity = clamp((t - b(31)) / 0.1);
       cta.style.transform = `translate(${px((W - L.ctaW) / 2)},${px(L.ctaY)}) scale(${(0.5 + 0.5 * Math.max(0, cp)).toFixed(4)})`;
-      const sh = Math.max(prog(t, b(28.2), 0.55), 0) * (t < b(30.2) ? 1 : 0) + (t >= b(30.2) ? prog(t, b(30.2), 0.55) : 0);
+      const sh = Math.max(prog(t, b(32.2), 0.55), 0) * (t < b(34.2) ? 1 : 0) + (t >= b(34.2) ? prog(t, b(34.2), 0.55) : 0);
       shine.style.left = `${(-40 + 180 * sh).toFixed(2)}%`;
       shine.style.opacity = sh > 0 && sh < 1 ? 1 : 0;
       if (url) {
-        url.style.opacity = E.outCubic(prog(t, b(27.3), 0.4));
-        url.style.transform = `translateY(${px((1 - E.outCubic(prog(t, b(27.3), 0.4))) * 16)})`;
+        url.style.opacity = E.outCubic(prog(t, b(31.8), 0.4));
+        url.style.transform = `translateY(${px((1 - E.outCubic(prog(t, b(31.8), 0.4))) * 16)})`;
       }
       // ticker of trades
-      const mo = E.outCubic(prog(t, b(26), 0.8));
+      const mo = E.outCubic(prog(t, b(30), 0.8));
       marquee.style.opacity = mo;
       marquee.style.transform = `translate(${px(-((t - t0) * 75) % L.mqW - 40)},${px(L.mqY - marquee.offsetHeight / 2)})`;
     }
@@ -1077,13 +1098,14 @@
   const BLUR = [
     [b(1) - 0.02, b(1) + 0.24], [b(2) - 0.02, b(2) + 0.24], [b(3) - 0.02, b(3) + 0.24], // colour wipes
     [b(4) - 0.24, b(4) + 0.06], // zoom through the full stop
-    [b(7.5), b(8) + 0.34], // hazard wipe + tape slams
-    [b(9) - 0.02, b(9) + 0.45], // tape torn away, browser drops in
-    [b(15.2), b(16) + 0.05], // circle wipe to orange
-    [b(23) - 0.05, b(24) + 0.05], // bars
-    [b(24), b(24) + 0.35], // logo spin
+    [b(11.5), b(12) + 0.34], // hazard wipe + tape slams
+    [b(13) - 0.02, b(13) + 0.45], // tape torn away, browser drops in
+    [b(19.2), b(20) + 0.05], // circle wipe to orange
+    [b(27) - 0.05, b(28) + 0.05], // bars
+    [b(28), b(28) + 0.35], // logo spin
   ];
-  window.__meta = { W, H, DUR, BPM: 128, format: P ? 'portrait' : 'landscape', blur: BLUR };
+  // poster: the settled end card between beats, after the CTA shine and before the final hit
+  window.__meta = { W, H, DUR, BPM: 128, lang: CFG.lang, format: P ? 'portrait' : 'landscape', blur: BLUR, poster: b(33) + 0.4 };
   window.__seek = (t) => { if (built) seek(t); };
   window.__ready = Promise.all([
     document.fonts.load('900 100px Archivo'),
@@ -1108,7 +1130,7 @@
     addEventListener('resize', fit);
     const bar = document.createElement('div');
     bar.className = 'player';
-    bar.innerHTML = '<button>❚❚</button><input type="range" min="0" max="15" step="0.001" value="0"><span>0.00</span>';
+    bar.innerHTML = `<button>❚❚</button><input type="range" min="0" max="${DUR}" step="0.001" value="0"><span>0.00</span>`;
     document.body.appendChild(bar);
     const [btn, range, label] = bar.children;
     const audio = new Audio('../out/soundtrack.wav');

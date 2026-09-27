@@ -2,10 +2,11 @@
 /*
  * Renders src/index.html to video, frame by frame, in headless Chromium.
  *
- *   node tools/render.mjs                         # 1920x1080, 60 fps, motion blur, with soundtrack
+ *   node tools/render.mjs                         # Danish, 1920x1080, 60 fps, motion blur, with soundtrack
  *   node tools/render.mjs --format=portrait       # 1080x1920 cut
+ *   node tools/render.mjs --lang=en               # English copy (src/config.en.js)
  *   node tools/render.mjs --stills=0.3,2.5,9      # just save PNG stills at those times
- *   node tools/render.mjs --poster                # end-card thumbnail → out/poster-1920x1080.png
+ *   node tools/render.mjs --poster                # end-card thumbnail → out/poster-da-1920x1080.png
  *
  * Motion blur: every frame is the average of several sub-frames spread over a 180° shutter —
  * --samples (default 4) normally, --samples-fast (default 16) inside the time ranges the page lists
@@ -31,6 +32,7 @@ const args = Object.fromEntries(
   })
 );
 const format = args.format === 'portrait' ? 'portrait' : 'landscape';
+const lang = args.lang === 'en' ? 'en' : 'da';
 const [W, H] = format === 'portrait' ? [1080, 1920] : [1920, 1080];
 const fps = Number(args.fps || 60);
 const samples = Math.max(1, Number(args.samples || 4));
@@ -39,7 +41,7 @@ const shutter = Number(args.shutter || 0.5);
 const workers = Math.max(1, Number(args.workers || Math.min(4, os.cpus().length)));
 const ffmpeg = process.env.FFMPEG || 'ffmpeg';
 const audio = args.audio === 'none' ? null : path.resolve(root, args.audio || 'out/soundtrack.wav');
-const outFile = path.resolve(root, args.out || `out/website-promo-15s-${format === 'portrait' ? '1080x1920' : '1920x1080'}.mp4`);
+const outFile = path.resolve(root, args.out || `out/website-promo-${lang}-${W}x${H}.mp4`);
 if (samplesFast % samples) throw new Error('--samples-fast must be a multiple of --samples');
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.wav': 'audio/wav', '.svg': 'image/svg+xml' };
@@ -56,7 +58,7 @@ function serve() {
 async function openPage(browser, port) {
   const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => { console.error('page error:', e.message); process.exitCode = 1; });
-  await page.goto(`http://127.0.0.1:${port}/src/index.html?format=${format}`);
+  await page.goto(`http://127.0.0.1:${port}/src/index.html?format=${format}&lang=${lang}`);
   await page.evaluate(() => window.__ready);
   const cdp = await page.context().newCDPSession(page);
   // lossless PNG with fast compression (the sub-frames are temporary)
@@ -83,8 +85,8 @@ const browser = await chromium.launch({ args: ['--font-render-hinting=none', '--
 try {
   if (args.poster) {
     const page = await openPage(browser, port);
-    await page.seek(args.poster === true ? 14.6 : Number(args.poster));
-    const f = path.join(root, 'out', `poster-${W}x${H}.png`);
+    await page.seek(args.poster === true ? await page.evaluate(() => window.__meta.poster) : Number(args.poster));
+    const f = path.join(root, 'out', `poster-${lang}-${W}x${H}.png`);
     fs.mkdirSync(path.dirname(f), { recursive: true });
     fs.writeFileSync(f, await page.shot());
     console.log(f);
@@ -94,7 +96,7 @@ try {
     const page = await openPage(browser, port);
     for (const t of String(args.stills).split(',').map(Number)) {
       await page.seek(t);
-      const f = path.join(dir, `${format}-${t.toFixed(3)}.png`);
+      const f = path.join(dir, `${lang}-${format}-${t.toFixed(3)}.png`);
       fs.writeFileSync(f, await page.shot());
       console.log(f);
     }
@@ -114,7 +116,7 @@ try {
     const dir = args.frames ? path.resolve(root, args.frames) : fs.mkdtempSync(path.join(os.tmpdir(), 'promo-frames-'));
     fs.mkdirSync(dir, { recursive: true });
     const name = (i) => path.join(dir, `${String(i).padStart(7, '0')}.png`);
-    console.log(`${format} ${W}x${H} · ${frames} frames @ ${fps} fps · ${samples}/${samplesFast} sub-frames · ${jobs.length} captures · ${workers} workers → ${dir}`);
+    console.log(`${lang} ${format} ${W}x${H} · ${frames} frames @ ${fps} fps · ${samples}/${samplesFast} sub-frames · ${jobs.length} captures · ${workers} workers → ${dir}`);
     let done = 0;
     const t0 = Date.now();
     await Promise.all(

@@ -1,14 +1,15 @@
 {
-  "name": "website-promo-15s",
+  "name": "website-promo",
   "private": true,
-  "description": "15-second motion graphic ad for a company that builds websites for service businesses",
+  "description": "Motion graphic ad (16.9 s, Danish + English) for a company that builds websites for service businesses",
   "type": "module",
   "scripts": {
     "audio": "python3 tools/make_audio.py",
     "render": "node tools/render.mjs",
     "render:portrait": "node tools/render.mjs --format=portrait",
+    "render:en": "node tools/render.mjs --lang=en && node tools/render.mjs --lang=en --format=portrait",
     "posters": "node tools/render.mjs --poster && node tools/render.mjs --poster --format=portrait",
-    "stills": "node tools/render.mjs --stills=0.3,1.2,2.4,3.2,4.0,6.6,9.9,13.8",
+    "stills": "node tools/render.mjs --stills=0.3,1.2,2.6,4.6,6.2,8.3,10.5,12.6,15.6",
     "preview": "node tools/preview.mjs"
   },
   "devDependencies": {

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Website promo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!--
+    Motion graphic, rendered deterministically: window.__seek(t) draws the frame at time t.
+    Open with ?preview for a scrubbable player, ?format=portrait for the 9:16 cut, ?t=3.2 to freeze a frame,
+    ?lang=en for the English copy (Danish is the default).
+  -->
+  <div id="stage"></div>
+  <script>
+    document.write('<script src="' + (new URLSearchParams(location.search).get('lang') === 'en' ? 'config.en.js' : 'config.js') + '"><\/script>');
+  </script>
+  <script src="icons.js"></script>
+  <script src="anim.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
