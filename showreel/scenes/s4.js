@@ -1,40 +1,43 @@
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 //  s4 · DEPTH                                          global 7.500 – 9.375  ·  lt = t − 7.5
 //
-//  One bar, four formations, one particle system (N = 1400, one identity per particle the whole
-//  way through — nothing is spawned or killed, every particle travels):
+//  One bar, one particle system (N = 1400, one identity per particle the whole way through —
+//  nothing is spawned or killed, every particle travels), three formations and a drain:
 //
-//    0.000  CONTRACT   ink + bone dot r=6 at centre; the engine's hit-shake is pinned off
-//    0.009  BURST      the dot detonates into a Fibonacci sphere (R 330): expoOut radial flight,
-//                      28% of particles overshoot on a gamma bump and settle; the spin whips in and
-//                      decays to 0.8 rad/s; a bone shock ring + signal echo ring ride the equator.
-//                      The formed sphere breathes with a travelling latitude ripple
-//    0.469  TORUS      sphere latitude → tube angle, longitude → ring angle: the poles punch
-//                      through to form the hole. Snap ease centred on the beat, staggered
-//                      top → bottom, mid-flight bulge; then it flows like a smoke ring
-//    0.9375 TERRAIN    the torus unrolls (back rows first) onto a 56×25 landscape seen ~30° above
-//                      the plane. Rows become Unknown-Pleasures ridge lines that trim on from the
-//                      centre as each row lands; back-to-front painter's order with occluders that
-//                      silhouette the peaks against an ultra horizon haze. Travelling sine + noise
-//                      ridges under a centred envelope; two signal "accent series"
-//    1.406  HELIX      each ridge line becomes one base-pair rung of a fast-spinning double helix
-//                      (row ends wrap up the two strands), rolled up bottom → top
-//    1.45   COLLAPSE   a drain: log-spiral paths in camera space, expoIn per particle, arrivals
-//                      staggered so two arms wind into the centre; particles heat to signal, a
-//                      hairline ring contracts ahead of them, a signal core glow builds
-//    1.70   DOT        the signal dot accretes as the arms land, pops to 17.5, settles to 14
-//    1.815+ CONTRACT   ink + signal dot r=14 at (960,540), nothing else (frames 559–562)
+//    0.000  BURST      the r=6 contract dot has already detonated on the first frame (f450): a bone
+//                      flash disc, a screen-space shock ring (r 300 → 700 over f450–452) and a
+//                      bloom surge; particles fly out on an expoOut radial flight into a Fibonacci
+//                      sphere (R 330), 28% overshoot and settle; the spin whips in and decays
+//    0.10   "R 330"    radius dimension + callout (mono, hairline leader — the s3 panel language)
+//    0.469  TORUS      sphere latitude → tube angle: the poles punch through to form the hole.
+//                      Snap ease centred on the beat, staggered top → bottom, mid-flight bulge
+//    0.56   "N 1400"   callout on the torus rim
+//    0.9375 TERRAIN    the torus unrolls (back rows first) onto a 56×25 landscape ~30° above the
+//                      plane. Rows are Unknown-Pleasures ridge lines that trim on from the centre;
+//                      back-to-front painter's order, each row's "mountain band" (ridge → its own
+//                      ground line) occludes the rows behind it
+//    1.00   "Z −760"   callout on the far ridge
+//    1.406  TUNNEL     the landscape rolls up: every row bends (true constant-curvature bend, far
+//                      rows first, sweeping toward the camera) into a ring around the view axis.
+//                      Ridges now point at the vanishing point; the same band occlusion holds
+//    1.49+  DRAIN      rings are sucked into the vanishing point on log-spiral paths, far rings
+//                      first, heating bone → signal; a signal core glow builds there
+//    1.72   DOT        the signal dot accretes as the rings land, pops to 18 as the last (nearest)
+//                      ring lands, settles to r=14
+//    1.845+ CONTRACT   ink + signal dot r=14 at (960,540), nothing else (frames 561–562)
 //
-//  Rhythm: every beat gets a 120 ms inhale (−4%) → spring kick, plus an energy flash (particles
-//  brighten and swell, peaking on the beat frame). Each morph's steepest point sits on its beat.
+//  Brightness is tiered by depth (near: bone, α 1, r 3.5–5 · mid: bone2, α .7, r 2.5 · far: gray,
+//  α .35, r 1.2), ~8% signal accents at full saturation, 5 lime sparks. Ridge lines 1.75 px bone,
+//  α .9 at the front → .25 at the back. No depth-of-field blur: depth reads through the tiers.
 //
-//  Rendering: hand-rolled perspective camera (dolly 1330 → 1150, roll, yaw sway); per-particle
-//  size / alpha / atmospheric tint by depth; sphere + torus lit as volumes (Lambert key from upper
-//  left + fresnel rim); physical-ish depth of field (circle of confusion drawn as soft bokeh
-//  sprites, focus racks between formations); a depth context of far dust and near lens motes that
-//  parallax with the camera; and self motion-blur — every particle is evaluated at t and
-//  t − 1/480 s and drawn as an energy-conserving capsule, so the engine's 4 sub-frames fuse into
-//  one continuous streak. api.detail < 1 (multiverse panels) thins particles and line work.
+//  Rhythm: every beat gets a 120 ms inhale (−4%) → spring kick, plus an energy flash. Each
+//  morph's steepest point sits on its beat.
+//
+//  Rendering: hand-rolled perspective camera (dolly, roll, yaw sway). Particles are evaluated at
+//  t and one motion-blur sub-sample earlier and drawn as capsules, so the engine's sub-samples
+//  fuse into streaks. Dots are batched by (alpha level, colour) into a few filled paths per
+//  row / per frame — per-dot draw calls are what made this scene slow.
+//  api.detail < 1 (multiverse panels) thins particles and line work and drops the callouts.
 //
 //  Pure function of lt. Static data is precomputed at module scope with R.rng — no Math.random,
 //  Date or performance.now.
@@ -48,16 +51,20 @@
   const seg = R.seg;
   const W = R.W, H = R.H, CX = W / 2, CY = H / 2;
   const PI = Math.PI;
+  const rgba = R.col.rgba;
 
   // ═════════════════════════════ timing (local seconds) ═════════════════════════════
   const B1 = BEAT, B2 = BEAT * 2, B3 = BEAT * 3, END = BEAT * 4; // .46875 .9375 1.40625 1.875
-  const T_BURST = 0.009;    // contract dot holds through frame 450's motion-blur sub-samples (≤ .00625),
-                            // then detonates — frame 451 is already mid-burst
-  const SUB = 1 / 480;      // one engine motion-blur sub-frame (4 sub-frames over a 180° shutter)
-  const D_AB = 0.26, D_BC = 0.24, D_CD = 0.22; // morph durations (per particle, before stagger)
-  const BC_SPREAD = 0.12;                      // terrain unroll stagger, back rows → front rows
-  const TC0 = 1.45, TC1 = 1.785;               // collapse window: first departures … last arrival
-  const T_DOT0 = 1.70, T_DOTPK = 1.792, T_CLEAN = 1.815; // signal dot accretes → pops → settled
+  const T_BURST = -0.002;   // detonation precedes the cut: f450's first sub-sample is already in flight
+  const SUB_FALLBACK = 1 / 480; // streak length when the render has no motion blur (stills)
+  const D_AB = 0.26, D_BC = 0.24, D_CD = 0.22; // morph durations (per particle / row, before stagger)
+  const BC_SPREAD = 0.12;   // terrain unroll stagger, back rows → front rows
+  const CD_SPREAD = 0.08;   // tunnel curl stagger, far rows → near rows
+  const D_CL = 0.22;        // each particle's drain flight (expoIn), ending at its arrival TA[i]
+  const CL_SPREAD = 0.11;   // drain arrivals: far ring … near ring
+  const TC1 = 1.815;        // last arrival (nearest ring) — the dot pops on it
+  const TC0 = TC1 - CL_SPREAD - 0.02 - D_CL; // first departure
+  const T_DOT0 = 1.44, T_DOTPK = 1.826, T_CLEAN = 1.845; // signal dot: born at the vanishing point → pops → settled
 
   // ═════════════════════════════ geometry ═════════════════════════════
   const N = 1400, COLS = 56, ROWS = 25;   // N = COLS × ROWS: every particle owns one terrain cell
@@ -67,11 +74,9 @@
   const SX = 34, ZF = -760, ZN = 520;      // terrain: column pitch, far/near row depth
   const THETA = 0.52;                      // terrain tilt toward camera (≈30° elevation)
   const T_YOFF = -40;                      // terrain vertical placement
-  const HH = 350, RH = 165, TURNS = 1.25;  // helix half-height, radius, turns
-  const H_YOFF = -16;                      // helix sits a touch high: its lean brings the base forward
-  const S_EDGE = 14;                       // helix: columns per row wrapped onto each strand
-  const GAP = (2 * HH) / ROWS;             // helix rung spacing
-  const ACCENT_A = 8, ACCENT_B = 17;       // rows drawn in signal (ridge lines → base pairs)
+  const RHO = (COLS * SX) / TAU;           // tunnel radius: a row's length wraps exactly once (303)
+  const ZT0 = -1000, ZT1 = 560;            // tunnel ring depth: far row … near row
+  const ACCENT_A = 8, ACCENT_B = 17;       // rows drawn in signal (a highlighted series)
 
   // ═════════════════════════════ static per-particle data ═════════════════════════════
   const rng = R.rng(0x5d4d3);
@@ -96,16 +101,15 @@
     DEL[i] = rng() * 0.035;
     DUR[i] = 0.3 + rng() * 0.14;
     OV[i] = rng() < 0.28 ? 0.1 + rng() * 0.28 : 0;
-    SZ[i] = 0.72 + rng() * 0.56;
+    SZ[i] = 0.82 + rng() * 0.36;
     JIT[i] = rng();
     LIFT[i] = 70 + rng() * 90;
     CLS[i] = rng() < 1 / 12 ? 1 : 0;
-    if (CLS[i] === 1) SZ[i] *= 1.15;
   }
   // A few lime sparks — they fly furthest on the burst.
   for (let k = 0; k < 5; k++) {
     const i = Math.floor(((k + 0.5) / 5) * N + (rng() - 0.5) * 120);
-    CLS[i] = 2; OV[i] = 0.55 + rng() * 0.2; SZ[i] = 1.35;
+    CLS[i] = 2; OV[i] = 0.55 + rng() * 0.2; SZ[i] = 1.1;
   }
 
   // ═════════════════════════════ small math ═════════════════════════════
@@ -123,12 +127,8 @@
   }
 
   // ═════════════════════════════ per-frame globals ═════════════════════════════
-  // Everything that depends only on time (not on the particle). Computed for t and t − SUB.
+  // Everything that depends only on time (not on the particle). Computed for t and t − sub.
   const G0 = {}, G1 = {};
-  // Focus plane (camera-space z) and DOF strength: front hemisphere → mid-landscape (tilt-shift)
-  // → helix axis → everything sharp for the implosion.
-  const FOCUS = [[0, 150], [B2 - 0.05, 150], [B2 + 0.22, 20, 'soft'], [B3 - 0.05, 20], [B3 + 0.16, 20, 'soft']];
-  const DOFK = [[0, 6], [0.25, 15, 'soft'], [B2 - 0.05, 15], [B2 + 0.22, 14, 'soft'], [B3 - 0.02, 14], [B3 + 0.18, 10, 'soft'], [TC0 + 0.1, 8], [TC1 - 0.06, 0, 'soft']];
 
   // Beat pulse: inhale (−4%) over the 120 ms before each beat, kick & settle after it.
   function pulse(t) {
@@ -152,15 +152,9 @@
     g.cx1 = Math.cos(tilt); g.sx1 = Math.sin(tilt);
     g.cz1 = Math.cos(roll); g.sz1 = Math.sin(roll);
     g.flowU = 1.3 * (t - B1); g.flowV = 3.0 * (t - B1);
-    // terrain: slow yaw drift = parallax; noise scrolls toward camera = fly-over
-    const yawT = lerp(-0.2, 0.12, E.sineInOut(seg(t, B2 - 0.25, B3 + 0.2)));
-    g.cyT = Math.cos(yawT); g.syT = Math.sin(yawT);
-    g.cT = Math.cos(THETA); g.sT = Math.sin(THETA);
-    // helix: spins fast and keeps accelerating into the collapse
-    const dt3 = t - B3;
-    g.hSpin = 0.6 + 10.5 * dt3 + 14 * Math.max(0, t - TC0) ** 2;
-    g.cxH = Math.cos(0.3); g.sxH = Math.sin(0.3);
-    g.czH = Math.cos(0.16); g.szH = Math.sin(0.16);
+    // terrain: slow yaw drift = parallax (unwinds as the rows roll up into the tunnel)
+    g.yawT = lerp(-0.2, 0.12, E.sineInOut(seg(t, B2 - 0.25, B3 + 0.2)));
+    g.cyT = Math.cos(g.yawT); g.syT = Math.sin(g.yawT);
     // beat pulse
     g.pulse = pulse(t);
     // beat flash: energy surge that peaks on each beat frame and decays (~90 ms half-life)
@@ -171,26 +165,24 @@
       else if (d < 0 && d > -0.035) fl += E.quadIn(1 + d / 0.035) * 0.8;
     }
     g.flash = fl;
-    // camera: slow dolly-in, roll across the bar, gentle yaw sway
-    g.camZ = lerp(1330, 1150, E.sineInOut(seg(t, 0, END)));
-    const cyaw = 0.1 * Math.sin(t * 1.4 + 0.5), croll = lerp(0.05, -0.05, E.sineInOut(seg(t, 0, END)));
+    // camera: slow dolly-in across the bar, plus a push into the tunnel
+    g.camZ = lerp(1330, 1150, E.sineInOut(seg(t, 0, END))) - 70 * E.sineInOut(seg(t, B3 - 0.1, END));
+    const cyaw = 0.1 * Math.sin(t * 1.4 + 0.5) * (1 - 0.75 * smoothstep(B3 - 0.1, B3 + 0.15, t)), croll = lerp(0.05, -0.05, E.sineInOut(seg(t, 0, END)));
     g.cyC = Math.cos(cyaw); g.syC = Math.sin(cyaw);
     g.czC = Math.cos(croll); g.szC = Math.sin(croll);
-    // depth of field
-    g.focusZ = R.keys(t, FOCUS);
-    g.dofK = R.keys(t, DOFK);
   }
 
   // Per-particle morph weights.
   const mixAB = (i, t) => E.snap(seg(t, AB0[i], AB0[i] + D_AB));
   const mixBC = (i, t) => E.snap(seg(t, BC0[i], BC0[i] + D_BC));
-  const mixCD = (i, t) => E.snap(seg(t, CD0[i], CD0[i] + D_CD));
-  const D_CL = 0.27; // each particle's implosion flight (expoIn), ending at its own arrival TA[i]
+  const mixCD = (i, t) => E.snap(seg(t, CD0[i], CD0[i] + D_CD)); // per row: rows bend as one curve
   const collapseK = (i, t) => E.expoIn(seg(t, TA[i] - D_CL, TA[i]));
 
-  // Terrain height (up = +). Unknown-Pleasures envelope: ridges concentrate in the centre columns.
-  function terrainH(gx, gz, t) {
-    const env = Math.exp(-(gx * gx) / (300 * 300)) * 0.9 + 0.1;
+  // Terrain height (up = +). Unknown-Pleasures envelope: ridges concentrate in the centre columns;
+  // as the row rolls up into a ring (m → 1) the envelope evens out around the circumference.
+  function terrainH(gx, gz, t, m) {
+    let env = Math.exp(-(gx * gx) / (300 * 300)) * 0.9 + 0.1;
+    if (m > 0) env = lerp(env, env * 0.55 + 0.1, m);
     const n1 = R.noise2(gx * 0.0046 + 3.1, gz * 0.0068 - t * 1.7);
     const n2 = R.noise2(gx * 0.011 - 7.3, gz * 0.015 - t * 2.3);
     let ridge = n1 * 0.68 + n2 * 0.32 + 0.32;
@@ -200,16 +192,45 @@
   }
 
   // ═════════════════════════════ particle placement ═════════════════════════════
-  // Computes camera-space position of particle i at time t (globals g) and projects it.
-  // Writes screen x/y, perspective scale and camera distance into out[0..3]; out[4] = collapse k;
-  // out[5] = lighting (sphere/torus are shaded as lit volumes, the line formations are not).
-  const OUT = new Float64Array(6);
-  // Key light from upper-left-front (y is down on screen); unit length.
-  const LX = -0.45, LY = -0.62, LZ = 0.64;
-  function place(i, t, g, out) {
+  // Computes the camera-space position of particle i at time t (globals g) and projects it.
+  // out: [0,1] screen x/y · [2] perspective scale · [3] camera distance · [4] drain progress ·
+  // [5] lighting · [6,7] screen x/y of the particle's ground point (height 0) in the landscape /
+  // tunnel — the lower edge of its row's occluding "mountain band".
+  const OUT = new Float64Array(8);
+  const LX = -0.45, LY = -0.62, LZ = 0.64; // key light, upper-left-front (y down), unit length
+  const TW = new Float64Array(6);          // terrain/tunnel scratch: ridge xyz, ground xyz
+
+  // Landscape → tunnel surface. Row-local frame: u along the row, v up, w depth. The row bends
+  // with curvature m / RHO (a true bend: arc length is preserved, so at m = 1 it closes into a
+  // ring exactly), then un-yaws, un-tilts and centres itself on the view axis.
+  function terrainWorld(i, t, g, m) {
+    const gx = (COL[i] - (COLS - 1) / 2) * SX;
+    const rf = ROW[i] / (ROWS - 1);
+    const gz = lerp(ZF, ZN, rf);
+    const h = terrainH(gx, gz, t, m) * (1 - 0.35 * m);
+    const w = m > 0 ? lerp(gz, lerp(ZT0, ZT1, rf), m) : gz;
+    let u, v, u0, v0;
+    if (m < 1e-4) { u = gx; v = h; u0 = gx; v0 = 0; } else {
+      const k = m / RHO, a = k * gx, sa = Math.sin(a), ca = Math.cos(a);
+      u0 = sa / k; v0 = (1 - ca) / k;
+      u = u0 - h * sa; v = v0 + h * ca;
+    }
+    let cyw = g.cyT, syw = g.syT, cth = Math.cos(THETA), sth = Math.sin(THETA), yoff = T_YOFF;
+    if (m > 0) {
+      const yaw = g.yawT * (1 - m), th = THETA * (1 - m);
+      cyw = Math.cos(yaw); syw = Math.sin(yaw); cth = Math.cos(th); sth = Math.sin(th);
+      yoff = lerp(T_YOFF, RHO, m);
+    }
+    let x1 = u * cyw + w * syw, z1 = -u * syw + w * cyw;
+    TW[0] = x1; TW[1] = -v * cth + z1 * sth + yoff; TW[2] = v * sth + z1 * cth;
+    x1 = u0 * cyw + w * syw; z1 = -u0 * syw + w * cyw;
+    TW[3] = x1; TW[4] = -v0 * cth + z1 * sth + yoff; TW[5] = v0 * sth + z1 * cth;
+  }
+
+  function place(i, t, g, out, wantBase) {
     let x = 0, y = 0, z = 0, lit = 1;
     const mBC = t < B2 - 0.2 ? 0 : mixBC(i, t);
-    const mCD = t < B3 - 0.2 ? 0 : mixCD(i, t);
+    const mCD = t < B3 - 0.25 ? 0 : mixCD(i, t);
 
     // ── A · sphere / B · torus (object space → world through the shared object transform)
     if (mBC < 1) {
@@ -243,72 +264,48 @@
       lit = 0.48 + 0.55 * lam + 0.5 * rim;
     }
 
-    // ── C · terrain (world)
-    if (mBC > 0 && mCD < 1) {
-      const gx = (COL[i] - (COLS - 1) / 2) * SX;
-      const gz = lerp(ZF, ZN, ROW[i] / (ROWS - 1));
-      const h = terrainH(gx, gz, t);
-      // rotY(yaw) on the flat grid, then tilt toward the camera
-      const x1 = gx * g.cyT + gz * g.syT, z1 = -gx * g.syT + gz * g.cyT;
-      const tx = x1, ty = -h * g.cT + z1 * g.sT + T_YOFF, tz = h * g.sT + z1 * g.cT;
+    // ── C · terrain → D · tunnel (world)
+    let bx = 0, by = 0, bz = 0, base = false;
+    if (mBC > 0) {
+      terrainWorld(i, t, g, mCD);
       if (mBC < 1) {
         const lift = LIFT[i] * Math.sin(PI * mBC); // tossed up and laid down
-        x = lerp(x, tx, mBC); y = lerp(y, ty, mBC) - lift; z = lerp(z, tz, mBC);
+        x = lerp(x, TW[0], mBC); y = lerp(y, TW[1], mBC) - lift; z = lerp(z, TW[2], mBC);
         lit = lerp(lit, 1, mBC);
-      } else { x = tx; y = ty; z = tz; lit = 1; }
-    }
-
-    // ── D · double helix (world). Row → rung height; outer columns wrap up the strands.
-    if (mCD > 0) {
-      const r = ROW[i], c = COL[i];
-      const yH = lerp(-HH, HH, (r + 0.5) / ROWS);
-      const k2a = (TURNS * TAU) / (2 * HH);
-      let hx, hy, hz;
-      if (c < S_EDGE) { // strand 0: from the previous rung up to this one
-        hy = yH - GAP * (1 - (c + 0.5) / S_EDGE);
-        const a = hy * k2a + g.hSpin;
-        hx = RH * Math.cos(a); hz = RH * Math.sin(a);
-      } else if (c >= COLS - S_EDGE) { // strand 1: from this rung on to the next
-        hy = yH + GAP * ((c - (COLS - S_EDGE) + 0.5) / S_EDGE);
-        const a = hy * k2a + g.hSpin + PI;
-        hx = RH * Math.cos(a); hz = RH * Math.sin(a);
-      } else { // rung across the axis
-        const k = (c - S_EDGE + 0.5) / (COLS - 2 * S_EDGE);
-        const a = yH * k2a + g.hSpin;
-        hy = yH; hx = RH * Math.cos(a) * (1 - 2 * k); hz = RH * Math.sin(a) * (1 - 2 * k);
+      } else {
+        x = TW[0]; y = TW[1]; z = TW[2]; lit = 1;
+        if (wantBase) { bx = TW[3]; by = TW[4]; bz = TW[5]; base = true; }
       }
-      // lean: rotX (seen from slightly above) → rotZ (diagonal)
-      const y1 = hy * g.cxH - hz * g.sxH, z1 = hy * g.sxH + hz * g.cxH;
-      const x2 = hx * g.czH - y1 * g.szH, y2 = hx * g.szH + y1 * g.czH + H_YOFF;
-      if (mCD < 1) {
-        const push = 1 + 0.12 * Math.sin(PI * mCD);
-        x = lerp(x, x2, mCD) * push; y = lerp(y, y2, mCD); z = lerp(z, z1, mCD) * push;
-      } else { x = x2; y = y2; z = z1; }
     }
+    if (!base) { bx = x; by = y; bz = z; }
 
     // ── beat pulse about the origin
-    x *= g.pulse; y *= g.pulse; z *= g.pulse;
+    const pu = g.pulse;
+    x *= pu; y *= pu; z *= pu; bx *= pu; by *= pu; bz *= pu;
 
     // ── camera: yaw → roll
-    let cx = x * g.cyC + z * g.syC, cz = -x * g.syC + z * g.cyC;
-    let cy = y;
-    const rx = cx * g.czC - cy * g.szC; cy = cx * g.szC + cy * g.czC; cx = rx;
+    let cx = x * g.cyC + z * g.syC, cz = -x * g.syC + z * g.cyC, cy = y;
+    let rx = cx * g.czC - cy * g.szC; cy = cx * g.szC + cy * g.czC; cx = rx;
+    let qx = bx * g.cyC + bz * g.syC, qz = -bx * g.syC + bz * g.cyC, qy = by;
+    rx = qx * g.czC - qy * g.szC; qy = qx * g.szC + qy * g.czC; qx = rx;
 
-    // ── collapse (camera space): a drain. Radius shrinks by (1 − k) while the angle advances by
+    // ── drain (camera space). Radius shrinks by (1 − k) while the angle advances by
     // −w·ln(1 − k): every particle rides an equiangular (log) spiral, so angular speed climbs as it
-    // nears the centre. Staggered arrivals (TA) turn that into two arms winding into the dot.
+    // nears the centre. Staggered arrivals (far rings first) wind the tunnel into a vortex.
     const ck = t < TC0 - 0.01 ? 0 : collapseK(i, t);
     if (ck > 0) {
       const k = 1 - ck;
       const a = -1.15 * Math.log(1 - 0.985 * ck);
-      const ca = Math.cos(a), sa = Math.sin(a);
-      const qx = (cx * ca - cy * sa) * k, qy = (cx * sa + cy * ca) * k;
-      cx = qx; cy = qy; cz *= k;
+      const ca = Math.cos(a) * k, sa = Math.sin(a) * k;
+      let tx = cx * ca - cy * sa; cy = cx * sa + cy * ca; cx = tx; cz *= k;
+      tx = qx * ca - qy * sa; qy = qx * sa + qy * ca; qx = tx; qz *= k;
     }
 
     // ── project
     const d = Math.max(1, g.camZ - cz), s = F / d;
     out[0] = CX + cx * s; out[1] = CY + cy * s; out[2] = s; out[3] = d; out[4] = ck; out[5] = lit;
+    const sb = F / Math.max(1, g.camZ - qz);
+    out[6] = CX + qx * sb; out[7] = CY + qy * sb;
   }
 
   // ═════════════════════════════ precompute: morph schedules + terrain cells ═════════════════════
@@ -340,111 +337,99 @@
     }
     for (let i = 0; i < N; i++) {
       const rf = ROW[i] / (ROWS - 1); // 0 far … 1 near
-      // terrain unrolls far → near; helix rolls up near (bottom) → far (top)
+      // terrain unrolls far → near; the tunnel curl sweeps far → near (no per-particle jitter:
+      // a row bends as one smooth curve)
       BC0[i] = B2 - 0.46 * D_BC + (rf - 0.5) * BC_SPREAD + (JIT[i] - 0.5) * 0.02;
-      CD0[i] = B3 - 0.46 * D_CD + (0.5 - rf) * 0.07 + (JIT[i] - 0.5) * 0.02;
-      // Arrival: the middle of the helix drains first, its two ends last → two arms wind into the
-      // dot, which accretes as they land. Rung centres (nearest the axis) lead their row.
-      const mid = Math.abs(ROW[i] - (ROWS - 1) / 2) / ((ROWS - 1) / 2);
+      CD0[i] = B3 - 0.46 * D_CD + (rf - 0.5) * CD_SPREAD;
+      // Drain arrivals: far rings first, the nearest ring last (the dot pops on it). The bottom
+      // of each ring (centre columns) leads a touch, so rings wind in as spirals, not circles.
       const axial = 1 - Math.abs((COL[i] - (COLS - 1) / 2) / ((COLS - 1) / 2));
-      TA[i] = TC1 - 0.075 * (1 - mid) - 0.012 * axial - 0.008 * JIT[i];
+      TA[i] = TC1 - CL_SPREAD * (1 - rf) - 0.014 * axial - 0.006 * JIT[i];
     }
   })();
 
-  // ═════════════════════════════ colour + sprites ═════════════════════════════
-  // Colours are resolved to css strings once. Depth fog tints bone toward a gray→ultra haze
-  // (a gradient between palette colours); heat blends bone → signal during the collapse.
-  const LUT_N = 16;
+  // ═════════════════════════════ colour tables + dot atlas ═════════════════════════════
+  // Every dot is a drawImage from one sprite atlas (a disc per colour, at two sizes). On the GPU
+  // canvas that is the cheap path: the draws batch into one textured-quad op, and a streak is the
+  // same disc stretched along its motion. (One path with many arcs, or a round-capped stroke per
+  // particle, both cost ~10× more here.)
   const hex = (rgb) => '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
-  const HAZE = hex(R.col.rgb(P.gray).map((v, j) => lerp(v, R.col.rgb(P.ultra)[j], 0.3)));
-  const lutFog = Array.from({ length: LUT_N }, (_, k) => R.col.mix(P.bone, HAZE, (0.75 * k) / (LUT_N - 1)));
-  const lutHeat = Array.from({ length: LUT_N }, (_, k) => R.col.mix(P.bone, P.signal, k / (LUT_N - 1)));
-
-  // Bokeh sprite per colour: soft disc with a brighter lens rim. Built lazily, cached forever.
-  const sprites = new Map();
-  function sprite(col) {
-    let s = sprites.get(col);
-    if (s) return s;
-    s = document.createElement('canvas');
-    s.width = s.height = 64;
-    const c = s.getContext('2d');
-    const m = col.match(/\d+/g).map(Number);
-    const rgba = (a) => `rgba(${m[0]},${m[1]},${m[2]},${a})`;
-    const gr = c.createRadialGradient(32, 32, 0, 32, 32, 31);
-    gr.addColorStop(0, rgba(0.55));
-    gr.addColorStop(0.74, rgba(0.66));
-    gr.addColorStop(0.89, rgba(0.86));
-    gr.addColorStop(0.95, rgba(0.45));
-    gr.addColorStop(1, rgba(0));
-    c.fillStyle = gr;
-    c.fillRect(0, 0, 64, 64);
-    sprites.set(col, s);
-    return s;
+  const mixHex = (a, b, k) => hex(R.col.rgb(a).map((v, j) => lerp(v, R.col.rgb(b)[j], k)));
+  const TIERS = 8; // depth tiers: gray (far) → bone2 (mid) → bone (near)
+  const COLTAB = [];
+  for (let k = 0; k < TIERS; k++) {
+    const q = k / (TIERS - 1);
+    COLTAB.push(q < 0.5 ? mixHex(P.gray, P.bone2, q / 0.5) : mixHex(P.bone2, P.bone, (q - 0.5) / 0.5));
   }
-  const SPR_K = 32 / 29; // sprite half-size / visible disc radius
+  const C_SIG = COLTAB.length; COLTAB.push(P.signal);
+  const C_LIME = COLTAB.length; COLTAB.push(P.lime);
+  const C_DUST = COLTAB.length; COLTAB.push(P.bone2);
+  const HEATS = 10, C_HEAT = COLTAB.length; // bone → signal as the drain heats up
+  for (let k = 0; k < HEATS; k++) COLTAB.push(mixHex(P.bone, P.signal, (k + 1) / HEATS));
+  const NCOL = COLTAB.length;
+  const SKIP = 0xff;
+  const lutHeat = Array.from({ length: 16 }, (_, k) => mixHex(P.bone, P.signal, k / 15));
+  // Atlas: row 0 = large discs (cell 16, radius 6.5) for r ≥ 1.8; row 1 = small (cell 8, r 3).
+  const CL = 16, RL = 6.5, CS = 8, RS = 3;
+  let ATLAS = null;
+  function atlas() {
+    if (ATLAS) return ATLAS;
+    ATLAS = document.createElement('canvas');
+    ATLAS.width = CL * NCOL; ATLAS.height = CL + CS;
+    const c = ATLAS.getContext('2d');
+    COLTAB.forEach((col, k) => {
+      c.fillStyle = col;
+      c.beginPath(); c.arc(k * CL + CL / 2, CL / 2, RL, 0, TAU); c.fill();
+      c.beginPath(); c.arc(k * CL + CS / 2, CL + CS / 2, RS, 0, TAU); c.fill();
+    });
+    return ATLAS;
+  }
 
-  // ═════════════════════════════ depth context: far dust + near bokeh motes ═════════════════════
-  // Not part of the particle system — a static world the camera moves through. Far specks and a
-  // handful of huge out-of-focus motes in front of the lens parallax against each other with the
-  // camera's yaw / roll / dolly, which is what sells the volume.
+  // ═════════════════════════════ depth context: far dust ═════════════════════════════
+  // A static field of far specks the camera moves through: parallax against the formations.
+  // (The old near "bokeh motes" are gone — they read as sensor dust.)
   const DUST = Array.from({ length: 170 }, () => ({
     x: (rng() - 0.5) * 4800, y: (rng() - 0.5) * 2800, z: -900 - rng() * 1900,
     r: 0.55 + rng() * 0.6, a: 0.1 + rng() * 0.3,
   }));
-  const MOTES = Array.from({ length: 14 }, (_, k) => ({
-    x: (rng() - 0.5) * 1900, y: (rng() - 0.5) * 1000, z: 480 + rng() * 330,
-    a: 0.02 + rng() * 0.026, sig: k % 7 === 3, vy: -12 - rng() * 22,
-  }));
-  function drawAtmosphere(ctx, g, alpha, sizeK, near) {
+  function drawDust(ctx, g, alpha, sizeK) {
     if (alpha <= 0.003) return;
-    const put = (x, y, z) => { // world → camera (yaw, roll) → screen
-      const cx = x * g.cyC + z * g.syC, cz = -x * g.syC + z * g.cyC;
-      const rx = cx * g.czC - y * g.szC, ry = cx * g.szC + y * g.czC;
+    const A = atlas(), sx = C_DUST * CL;
+    for (const d of DUST) {
+      const cx = d.x * g.cyC + d.z * g.syC, cz = -d.x * g.syC + d.z * g.cyC;
+      const rx = cx * g.czC - d.y * g.szC, ry = cx * g.szC + d.y * g.czC;
       const s = F / Math.max(40, g.camZ - cz);
-      return [CX + rx * s, CY + ry * s, s];
-    };
-    if (!near) {
-      ctx.fillStyle = P.bone2;
-      for (const d of DUST) {
-        const [x, y] = put(d.x, d.y, d.z);
-        if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
-        ctx.globalAlpha = d.a * alpha;
-        ctx.beginPath(); ctx.arc(x, y, d.r * sizeK, 0, TAU); ctx.fill();
-      }
-      return;
-    }
-    for (const m of MOTES) {
-      const [x, y, s] = put(m.x, m.y + m.vy * g.t, m.z);
-      const rr = 14 + s * 16; // huge circle of confusion: they sit well in front of the focus
-      if (x < -rr || x > W + rr || y < -rr || y > H + rr) continue;
-      ctx.globalAlpha = m.a * alpha;
-      const q = rr * SPR_K;
-      ctx.drawImage(sprite(R.col.rgba(m.sig ? P.signal : P.bone, 1)), x - q, y - q, q * 2, q * 2);
+      const x = CX + rx * s, y = CY + ry * s;
+      if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
+      const q = (d.r * sizeK * (CS / 2)) / RS;
+      ctx.globalAlpha = (d.a * 0.8 + 0.05) * alpha;
+      ctx.drawImage(A, sx, CL, CS, CS, x - q, y - q, 2 * q, 2 * q);
     }
   }
 
   // ═════════════════════════════ frame buffers ═════════════════════════════
-  // Screen position now (X0/Y0) and one sub-frame ago (X1/Y1), perspective scale, camera distance,
-  // collapse progress and lighting — filled once per frame, read by the painters.
   const X0 = new Float32Array(N), Y0 = new Float32Array(N), S0 = new Float32Array(N), D0 = new Float32Array(N);
   const X1 = new Float32Array(N), Y1 = new Float32Array(N), CK = new Float32Array(N), LIT = new Float32Array(N);
-  const ORDER = new Uint16Array(N);
+  const BX = new Float32Array(N), BY = new Float32Array(N);
+  const CIDX = new Uint8Array(N), RAD = new Float32Array(N), ALPHA = new Float32Array(N);
+  const ORDER = new Uint16Array(N), ROWIDX = new Uint16Array(COLS);
 
   // ═════════════════════════════ drawing helpers ═════════════════════════════
-  // Undo the engine hit-shake (R.unshake) so the contract frames are pixel-exact.
-  function pinContract(ctx, api, t, w) {
-    if (w <= 0 || api.detail !== 1) return;
-    R.unshake(ctx, api, w);
-  }
-
-  // Background: ink + a breathing ink2 radial glow. The same gradient fills the ridge occluders,
-  // so hidden-line removal is invisible against the backdrop.
-  function glowGradient(ctx, a) {
+  // Background glow: ink → ink2 at the centre. It is added LAST with 'lighter' (adding ink2 − ink),
+  // which is identical to painting it underneath, but lets the ridge occluders be plain ink.
+  const GLOW_ADD = 'rgba(' + R.col.rgb(P.ink2).map((v, j) => v - R.col.rgb(P.ink)[j]).join(',');
+  function drawGlow(ctx, a) {
+    if (a <= 0.002) return;
     const g = ctx.createRadialGradient(CX, CY - 40, 0, CX, CY - 40, 900);
-    g.addColorStop(0, R.col.rgba(P.ink2, a));
-    g.addColorStop(0.55, R.col.rgba(P.ink2, a * 0.45));
-    g.addColorStop(1, R.col.rgba(P.ink2, 0));
-    return g;
+    g.addColorStop(0, GLOW_ADD + ',' + a.toFixed(4) + ')');
+    g.addColorStop(0.55, GLOW_ADD + ',' + (a * 0.45).toFixed(4) + ')');
+    g.addColorStop(1, GLOW_ADD + ',0)');
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
+    ctx.fillRect(-200, -200, W + 400, H + 400);
+    ctx.restore();
   }
 
   // Projected ring on the sphere/torus equator (object space), for the burst shockwave.
@@ -455,7 +440,7 @@
       const a = (k / 120) * TAU;
       const px = Math.cos(a) * radius, pz = Math.sin(a) * radius;
       let x1 = px * g.cy1 + pz * g.sy1, z1 = -px * g.sy1 + pz * g.cy1;
-      let y1 = -z1 * g.sx1; z1 = z1 * g.cx1;
+      const y1 = -z1 * g.sx1; z1 = z1 * g.cx1;
       let x = x1 * g.cz1 - y1 * g.sz1, y = x1 * g.sz1 + y1 * g.cz1;
       x *= g.pulse; y *= g.pulse; z1 *= g.pulse;
       let cx = x * g.cyC + z1 * g.syC; const cz = -x * g.syC + z1 * g.cyC;
@@ -469,19 +454,18 @@
     ctx.stroke();
   }
 
-  // One ridge line / rung through the row's current screen positions (quadratic mid-point
-  // smoothing). `span` 0..1 trims the line symmetrically from the centre column outward (AE Trim
-  // Paths), with fractional end points so the draw-on is continuous. Returns the point count; the
-  // trimmed end points stay in RP_X / RP_Y for the occluder.
+  // Row points (screen space) for row r from arrays XA/YA into OX/OY. `span` 0..1 trims the row
+  // symmetrically from the centre column outward (AE Trim Paths) with fractional end points.
   const RP_X = new Float32Array(COLS + 2), RP_Y = new Float32Array(COLS + 2);
-  function rowPath(ctx, r, span = 1) {
+  const RB_X = new Float32Array(COLS + 2), RB_Y = new Float32Array(COLS + 2);
+  function rowPts(r, span, XA, YA, OX, OY) {
     const base = r * COLS, cm = (COLS - 1) / 2;
     let n = 0;
-    const push = (c, f) => { // point at column c + f (0 ≤ f < 1)
+    const push = (c, f) => {
       const i = GRID[base + c];
-      if (f <= 0) { RP_X[n] = X0[i]; RP_Y[n] = Y0[i]; } else {
+      if (f <= 0) { OX[n] = XA[i]; OY[n] = YA[i]; } else {
         const j = GRID[base + c + 1];
-        RP_X[n] = lerp(X0[i], X0[j], f); RP_Y[n] = lerp(Y0[i], Y0[j], f);
+        OX[n] = lerp(XA[i], XA[j], f); OY[n] = lerp(YA[i], YA[j], f);
       }
       n++;
     };
@@ -493,34 +477,185 @@
       for (let c = a0 + 1; c <= b0; c++) push(c, 0);
       if (cB - b0 > 1e-3) push(b0, cB - b0);
     }
-    if (n < 2) return 0;
-    ctx.moveTo(RP_X[0], RP_Y[0]);
-    for (let k = 1; k < n - 1; k++) {
-      ctx.quadraticCurveTo(RP_X[k], RP_Y[k], (RP_X[k] + RP_X[k + 1]) * 0.5, (RP_Y[k] + RP_Y[k + 1]) * 0.5);
-    }
-    ctx.lineTo(RP_X[n - 1], RP_Y[n - 1]);
     return n;
+  }
+  // Catmull-Rom through the points (as cubic Béziers), so every dot sits exactly on its line:
+  // open, or closed into a loop.
+  function smoothOpen(ctx, X, Y, n) {
+    ctx.moveTo(X[0], Y[0]);
+    for (let k = 0; k < n - 1; k++) {
+      const a = k > 0 ? k - 1 : 0, d = k + 2 < n ? k + 2 : n - 1;
+      ctx.bezierCurveTo(X[k] + (X[k + 1] - X[a]) / 6, Y[k] + (Y[k + 1] - Y[a]) / 6,
+        X[k + 1] - (X[d] - X[k]) / 6, Y[k + 1] - (Y[d] - Y[k]) / 6, X[k + 1], Y[k + 1]);
+    }
+  }
+  function smoothClosed(ctx, X, Y, n) {
+    ctx.moveTo(X[0], Y[0]);
+    for (let k = 0; k < n; k++) {
+      const a = (k + n - 1) % n, b = (k + 1) % n, d = (k + 2) % n;
+      ctx.bezierCurveTo(X[k] + (X[b] - X[a]) / 6, Y[k] + (Y[b] - Y[a]) / 6,
+        X[b] - (X[d] - X[k]) / 6, Y[b] - (Y[d] - Y[k]) / 6, X[b], Y[b]);
+    }
+    ctx.closePath();
   }
 
   // Ridge draw-on: each row trims on from the centre as its particles land (back rows first).
-  // Starts once the row is ~90% landed (snap reaches .93 at 70% of its move).
   const rowSpan = (r, t) => { const t0 = B2 - 0.46 * D_BC + 0.7 * D_BC + (r / (ROWS - 1) - 0.5) * BC_SPREAD; return E.expoOut(seg(t, t0, t0 + 0.22)); };
+
+  // ═════════════════════════════ callouts (the reel's mono annotation language) ═════════════════
+  const SCRAMBLE = '<>/\\[]{}=+*#%01';
+  const mono = (ctx, size, spacing, weight = 500) => R.font(ctx, { family: 'JetBrains Mono', weight, size, spacing, align: 'left' });
+  // Characters decode left → right through a short scramble (seeded by the output frame, so all
+  // motion-blur sub-samples of a frame agree); on the way out they scramble away right → left.
+  function decode(str, lt, tIn, tOut, fr, per = 0.008, hold = 0.03) {
+    let s = '';
+    const n = str.length;
+    for (let i = 0; i < n; i++) {
+      const ch = str[i];
+      const a = tIn + i * per, b = tOut + (n - 1 - i) * per * 0.7;
+      if (lt < a || lt >= b + hold) s += ' ';
+      else if (ch !== ' ' && (lt < a + hold || lt >= b)) s += SCRAMBLE[Math.floor(R.hash(i * 13.7 + fr * 1.37) * SCRAMBLE.length)];
+      else s += ch;
+    }
+    return s;
+  }
+  // A callout is a polyline (anchor … elbow … end) drawn on with a trim from the anchor, a node on
+  // the anchor, an end tick, and a mono label (gray tag + bone value) sitting on the horizontal run.
+  const CO = [
+    { t0: 0.10, t1: 0.38, tag: 'R', val: '330' },   // sphere radius (a dimension line from the centre)
+    { t0: 0.56, t1: 0.82, tag: 'N', val: '1400' },  // particle count, on the torus rim
+    { t0: 1.00, t1: 1.28, tag: 'Z', val: '−760' }, // far plane, on the back ridge
+  ];
+  function drawCallout(ctx, lt, fr, c, pts, nodeK, dir) {
+    const tin = seg(lt, c.t0, c.t0 + 0.16), tout = seg(lt, c.t1, c.t1 + 0.1);
+    if (tin <= 0 || tout >= 1) return;
+    let L = 0;
+    const acc = [0];
+    for (let k = 1; k < pts.length; k++) { L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); acc.push(L); }
+    const head = E.expoOut(tin) * L, tail = E.expoIn(tout) * L;
+    const at = (s) => {
+      let k = 1;
+      while (k < pts.length - 1 && acc[k] < s) k++;
+      const u = clamp((s - acc[k - 1]) / Math.max(1e-6, acc[k] - acc[k - 1]));
+      return [lerp(pts[k - 1][0], pts[k][0], u), lerp(pts[k - 1][1], pts[k][1], u)];
+    };
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = rgba(P.bone, 0.55);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const p0 = at(tail);
+    ctx.moveTo(p0[0], p0[1]);
+    for (let k = 1; k < pts.length - 1; k++) if (acc[k] > tail && acc[k] < head) ctx.lineTo(pts[k][0], pts[k][1]);
+    const p1 = at(head);
+    ctx.lineTo(p1[0], p1[1]);
+    ctx.stroke();
+    // node on the anchor: bone dot inside a hairline ring
+    const pop = E.backOut(seg(lt, c.t0, c.t0 + 0.12), 2.4) * (1 - E.quadIn(seg(lt, c.t1, c.t1 + 0.07)));
+    if (pop > 0.02) {
+      const [nx, ny] = pts[nodeK];
+      ctx.fillStyle = P.bone;
+      ctx.beginPath(); ctx.arc(nx, ny, 2.6 * pop, 0, TAU); ctx.fill();
+      ctx.strokeStyle = rgba(P.bone, 0.55);
+      ctx.beginPath(); ctx.arc(nx, ny, 7 * pop, 0, TAU); ctx.stroke();
+    }
+    // end tick
+    const [ex, ey] = pts[pts.length - 1];
+    const tick = E.expoOut(seg(lt, c.t0 + 0.08, c.t0 + 0.18)) * (1 - E.expoIn(tout));
+    if (tick > 0.02) {
+      ctx.strokeStyle = rgba(P.bone, 0.55);
+      ctx.beginPath(); ctx.moveTo(ex, ey - 4 * tick); ctx.lineTo(ex, ey + 4 * tick); ctx.stroke();
+    }
+    // label: sits on the run, flush with its outer end
+    mono(ctx, 15, 2);
+    const tagW = ctx.measureText(c.tag + ' ').width;
+    mono(ctx, 15, 1);
+    const valW = ctx.measureText(c.val).width;
+    const tw = tagW + valW;
+    const x0 = dir > 0 ? ex - tw - 2 : ex + 3;
+    const yb = ey - 9;
+    const tIn = c.t0 + 0.06, tOut = c.t1 - 0.02;
+    mono(ctx, 15, 2);
+    ctx.fillStyle = P.gray;
+    ctx.fillText(decode(c.tag, lt, tIn, tOut + 0.02, fr), x0, yb);
+    mono(ctx, 15, 1);
+    ctx.fillStyle = P.bone;
+    ctx.fillText(decode(c.val, lt, tIn + 0.02, tOut, fr), x0 + tagW, yb);
+  }
+
+  // Screen projection of an object-space point through the sphere/torus transform + camera.
+  function projObj(g, px, py, pz) {
+    let x1 = px * g.cy1 + pz * g.sy1, z1 = -px * g.sy1 + pz * g.cy1;
+    const y1 = py * g.cx1 - z1 * g.sx1; z1 = py * g.sx1 + z1 * g.cx1;
+    let x = (x1 * g.cz1 - y1 * g.sz1) * g.pulse, y = (x1 * g.sz1 + y1 * g.cz1) * g.pulse; z1 *= g.pulse;
+    let cx = x * g.cyC + z1 * g.syC; const cz = -x * g.syC + z1 * g.cyC;
+    const rx = cx * g.czC - y * g.szC; const cy = cx * g.szC + y * g.czC; cx = rx;
+    const s = F / (g.camZ - cz);
+    return [CX + cx * s, CY + cy * s];
+  }
+
+  function drawCallouts(ctx, lt, api, g) {
+    const fr = Math.round((api.frameT ?? api.t) * 60);
+    // 1 · sphere radius: dimension line from the centre to the silhouette, then the leader
+    if (lt > CO[0].t0 && lt < CO[0].t1 + 0.12) {
+      const rb = R_S * g.pulse * E.expoOut(clamp((lt - T_BURST) / 0.37));
+      const rs = (F * rb) / Math.sqrt(g.camZ * g.camZ - rb * rb);
+      const a = -0.62;
+      const rx = CX + Math.cos(a) * rs, ry = CY + Math.sin(a) * rs;
+      const ex = rx + 30, ey = ry - 30;
+      drawCallout(ctx, lt, fr, CO[0], [[CX, CY], [rx, ry], [ex, ey], [ex + 118, ey]], 1, 1);
+      // centre cross
+      const k = E.expoOut(seg(lt, CO[0].t0, CO[0].t0 + 0.12)) * (1 - E.expoIn(seg(lt, CO[0].t1, CO[0].t1 + 0.1)));
+      if (k > 0.02) {
+        ctx.strokeStyle = rgba(P.bone, 0.55);
+        ctx.beginPath();
+        ctx.moveTo(CX - 7 * k, CY); ctx.lineTo(CX + 7 * k, CY);
+        ctx.moveTo(CX, CY - 7 * k); ctx.lineTo(CX, CY + 7 * k);
+        ctx.stroke();
+      }
+    }
+    // 2 · particle count, on the torus's leftmost outer rim point (stable: the torus is symmetric
+    // about its axis, so spin and flow never move its silhouette)
+    if (lt > CO[1].t0 && lt < CO[1].t1 + 0.12) {
+      let best = null;
+      for (let k = 0; k < 48; k++) {
+        const a = (k / 48) * TAU;
+        const p = projObj(g, Math.cos(a) * (RT + RTUBE), 0, Math.sin(a) * (RT + RTUBE));
+        if (!best || p[0] < best[0]) best = p;
+      }
+      const [ax, ay] = best;
+      const ex = ax - 34, ey = ay - 34;
+      drawCallout(ctx, lt, fr, CO[1], [[ax, ay], [ex, ey], [ex - 128, ey]], 0, -1);
+    }
+    // 3 · far plane: tracks a point on the back ridge, left of centre
+    if (lt > CO[2].t0 && lt < CO[2].t1 + 0.12) {
+      const i = GRID[0 * COLS + 13];
+      const ax = X0[i], ay = Y0[i];
+      const ex = ax - 44, ey = ay - 44;
+      drawCallout(ctx, lt, fr, CO[2], [[ax, ay], [ex, ey], [ex - 128, ey]], 0, -1);
+    }
+  }
 
   // ═════════════════════════════ scene ═════════════════════════════
   R.scene({
     id: 's4',
     shake: 0.8,
+    // Line work and rings can't self-blur like the particles do (they size their streaks by
+    // api.subDt), so the fastest stretches get more sub-samples: the burst frames (f450–452), the
+    // tunnel curl (row ends sweep ~30 px per sub-sample at 4) and the late drain.
+    samplesAt: (lt) => (lt < 0.045 ? 16 : lt > 1.31 && lt < 1.52 ? 16 : lt > 1.69 && lt < 1.82 ? 12 : 4),
     render(ctx, lt, api) {
       const detail = api.detail ?? 1;
       const t = lt;
+      const SUB = api.subDt > 0 ? api.subDt : SUB_FALLBACK;
 
-      // Contract pin: hold the engine shake off for the whole contract frame (incl. its
-      // motion-blur sub-frames) and ease it in over the next two frames; pin again at the end.
-      const pinIn = 1 - smoothstep(T_BURST, T_BURST + 0.035, t);
+      // Contract pin at the out-edge: cancel the (tiny) residual hit shake so the dot is exact.
+      // The in-edge is an impact frame, so it keeps the engine's hit shake.
       const pinOut = smoothstep(T_CLEAN - 0.03, T_CLEAN, t);
-      pinContract(ctx, api, api.t, Math.max(pinIn, pinOut));
+      if (pinOut > 0 && detail === 1) R.unshake(ctx, api, pinOut);
 
-      // ── contract states ────────────────────────────────────────────────────
+      // ── contract states (a panel can still ask for lt < T_BURST) ─────────────
       if (t < T_BURST) {
         ctx.fillStyle = P.bone;
         ctx.beginPath(); ctx.arc(CX, CY, 6, 0, TAU); ctx.fill();
@@ -535,229 +670,232 @@
       const g = G0, gp = G1;
       globals(t, g);
       globals(t - SUB, gp);
-
-      // ── background glow ────────────────────────────────────────────────────
-      const glowA = smoothstep(T_BURST, 0.32, t) * (1 - smoothstep(1.58, 1.78, t));
-      const bgGrad = glowA > 0.002 ? glowGradient(ctx, 0.9 * glowA) : null;
-      if (bgGrad) { ctx.fillStyle = bgGrad; ctx.fillRect(-200, -200, W + 400, H + 400); }
-      const atmoA = smoothstep(0.04, 0.3, t) * (1 - smoothstep(1.5, 1.68, t));
-      drawAtmosphere(ctx, g, atmoA, detail >= 0.99 ? 1 : 1.6, false);
-
-      // ── horizon haze: an ultra glow behind the landscape's far edge. The ridge occluders are
-      // ink, so the mountains silhouette against it (it is deliberately not in the occluder fill).
-      const hazeA = smoothstep(B2 + 0.02, B2 + 0.2, t) * (1 - smoothstep(B3 - 0.1, B3 + 0.06, t));
-      if (hazeA > 0.003) {
-        const hy = CY - 250;
-        ctx.save();
-        ctx.translate(CX, hy);
-        ctx.scale(1, 0.24);
-        const hg = ctx.createRadialGradient(0, 0, 0, 0, 0, 980);
-        hg.addColorStop(0, R.col.rgba(P.ultra, 0.2 * hazeA));
-        hg.addColorStop(0.45, R.col.rgba(P.ultra, 0.07 * hazeA));
-        hg.addColorStop(1, R.col.rgba(P.ultra, 0));
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = hg;
-        ctx.fillRect(-1000, -1000, 2000, 2000);
-        ctx.restore();
-      }
-
-      // ── place every particle (now + one sub-frame ago) ─────────────────────
-      const s0 = F / g.camZ;
-      const alive = t < TC1;
-      if (alive) {
-        for (let i = 0; i < N; i++) {
-          place(i, t, g, OUT);
-          X0[i] = OUT[0]; Y0[i] = OUT[1]; S0[i] = OUT[2]; D0[i] = OUT[3]; CK[i] = OUT[4]; LIT[i] = OUT[5];
-          place(i, t - SUB, gp, OUT);
-          X1[i] = OUT[0]; Y1[i] = OUT[1];
-        }
-      }
-
-      // ── burst: core flash + equatorial shock rings ─────────────────────────
       const tb = t - T_BURST;
-      if (tb < 0.6) {
-        const core = 1 - seg(tb, 0, 0.12);
-        if (core > 0) {
-          const rr = lerp(30, 130, E.expoOut(seg(tb, 0, 0.12)));
-          const gr = ctx.createRadialGradient(CX, CY, 0, CX, CY, rr);
-          gr.addColorStop(0, R.col.rgba(P.bone, 0.95 * core * core));
-          gr.addColorStop(0.35, R.col.rgba(P.bone, 0.25 * core * core));
-          gr.addColorStop(1, R.col.rgba(P.bone, 0));
-          ctx.globalAlpha = 1;
-          ctx.fillStyle = gr;
-          ctx.fillRect(CX - rr, CY - rr, rr * 2, rr * 2);
-        }
-        const u1 = seg(tb, 0, 0.55), u2 = seg(tb, 0.05, 0.55);
-        drawRing(ctx, g, R_S * 1.7 * E.expoOut(u1), P.bone, 0.5 * Math.pow(1 - u1, 1.6), 1.6 - u1);
-        drawRing(ctx, g, R_S * 1.25 * E.expoOut(u2), P.signal, 0.55 * Math.pow(1 - u2, 1.4), 1.2);
-      }
 
-      // ── collapse: heat builds at the drain (a soft signal core glow, gone before the contract)
-      const coreA = smoothstep(1.62, 1.77, t) * (1 - smoothstep(1.785, 1.808, t));
+      // ── background glow + far dust ─────────────────────────────────────────
+      const glowA = smoothstep(0, 0.32, t) * (1 - smoothstep(1.62, 1.8, t));
+      const atmoA = smoothstep(0.04, 0.3, t) * (1 - smoothstep(1.5, 1.68, t));
+      drawDust(ctx, g, atmoA, detail >= 0.99 ? 1 : 1.6);
+
+      // ── vanishing point: a tight signal glow around the dot that waits at the tunnel's end ──
+      const coreA = smoothstep(1.46, 1.7, t) * (1 - smoothstep(1.8, 1.835, t));
       if (coreA > 0.003) {
-        const rr = lerp(170, 60, E.quadIn(seg(t, 1.62, 1.8)));
+        const rr = lerp(60, 90, E.quadIn(seg(t, 1.46, 1.8)));
         const cg = ctx.createRadialGradient(CX, CY, 0, CX, CY, rr);
-        cg.addColorStop(0, R.col.rgba(P.signal, 0.32 * coreA));
-        cg.addColorStop(0.3, R.col.rgba(P.signal, 0.1 * coreA));
-        cg.addColorStop(1, R.col.rgba(P.signal, 0));
+        cg.addColorStop(0, rgba(P.signal, 0.5 * coreA));
+        cg.addColorStop(0.18, rgba(P.signal, 0.28 * coreA));
+        cg.addColorStop(0.5, rgba(P.signal, 0.06 * coreA));
+        cg.addColorStop(1, rgba(P.signal, 0));
         ctx.globalAlpha = 1;
         ctx.fillStyle = cg;
         ctx.fillRect(CX - rr, CY - rr, rr * 2, rr * 2);
       }
 
-      // ── collapse: a hairline signal ring contracts ahead of the arms ────────
-      if (t > 1.64 && t < TC1) {
-        const u = seg(t, 1.64, TC1);
-        const rr = lerp(250, 12, E.expoIn(u));
-        ctx.globalAlpha = 0.45 * smoothstep(0, 0.3, u);
-        ctx.strokeStyle = P.signal;
-        ctx.lineWidth = lerp(0.8, 1.8, u);
-        ctx.beginPath(); ctx.arc(CX, CY, rr, 0, TAU); ctx.stroke();
+      // ── place every particle (now + one sub-sample ago) ────────────────────
+      const s0 = F / g.camZ;
+      const alive = t < TC1;
+      // Occlusion (mountain bands) from the settled landscape through the tunnel and the drain.
+      const occA = smoothstep(B2 + 0.1, B2 + 0.24, t) * (1 - smoothstep(1.785, 1.81, t));
+      if (alive) {
+        const wantBase = occA > 0.01;
+        for (let i = 0; i < N; i++) {
+          place(i, t, g, OUT, wantBase);
+          X0[i] = OUT[0]; Y0[i] = OUT[1]; S0[i] = OUT[2]; D0[i] = OUT[3]; CK[i] = OUT[4]; LIT[i] = OUT[5];
+          BX[i] = OUT[6]; BY[i] = OUT[7];
+          place(i, t - SUB, gp, OUT, false);
+          X1[i] = OUT[0]; Y1[i] = OUT[1];
+        }
+      }
+
+      // ── burst: flash disc, screen-space shock rings, equatorial rings ──────
+      if (tb < 0.6) {
+        // flash disc: the dot's energy, released on the cut frame. Solid on f450, then it opens
+        // from the centre into a thinning ring (f451–452) that the particles fly out of.
+        const fu = seg(tb, 0, 0.034);
+        if (fu < 1) {
+          const ro = 120 + 60 * E.expoOut(seg(tb, 0, 0.05));
+          const ri = ro * E.expoOut(seg(tb, 0.009, 0.034));
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = P.bone;
+          ctx.beginPath();
+          ctx.arc(CX, CY, ro, 0, TAU);
+          if (ri > 0.5) { ctx.moveTo(CX + ri, CY); ctx.arc(CX, CY, ri, 0, TAU, true); }
+          ctx.fill();
+        }
+        // shock ring: bone, r 300 → 700 (half-way by f452), thinning and fading as it goes
+        const su = seg(tb, 0, 0.1);
+        if (su < 1) {
+          ctx.globalAlpha = Math.pow(1 - su, 1.2);
+          ctx.strokeStyle = P.bone;
+          ctx.lineWidth = lerp(7, 1.2, E.quadOut(su));
+          ctx.beginPath(); ctx.arc(CX, CY, 300 + 400 * E.quadOut(su), 0, TAU); ctx.stroke();
+        }
+        // signal echo, a beat behind
+        const eu = seg(tb, 0.004, 0.12);
+        if (eu > 0 && eu < 1) {
+          ctx.globalAlpha = 0.85 * Math.pow(1 - eu, 1.5);
+          ctx.strokeStyle = P.signal;
+          ctx.lineWidth = lerp(4, 1, eu);
+          ctx.beginPath(); ctx.arc(CX, CY, 210 + 300 * E.quadOut(eu), 0, TAU); ctx.stroke();
+        }
+        const u1 = seg(tb, 0, 0.55), u2 = seg(tb, 0.05, 0.55);
+        drawRing(ctx, g, R_S * 1.7 * E.expoOut(u1), P.bone, 0.6 * Math.pow(1 - u1, 1.6), 1.8 - u1);
+        drawRing(ctx, g, R_S * 1.25 * E.expoOut(u2), P.signal, 0.75 * Math.pow(1 - u2, 1.4), 1.4);
       }
 
       if (alive) {
         const stride = detail >= 0.99 ? 1 : Math.max(1, Math.round(1 / clamp(detail * 1.6, 0.2, 1)));
         const sizeK = detail >= 0.99 ? 1 : Math.min(2.2, 1 / Math.sqrt(Math.max(0.2, detail)));
-        const dF = g.camZ - g.focusZ, dofK = g.dofK;
+        // Line work: ridge lines, revealed per row by rowSpan (trim-on); each ring fades as it lands.
+        const lineA = smoothstep(B2 - 0.04, B2 + 0.04, t);
+        const heatT = seg(t, 1.765, 1.81); // rings heat as they drain; the last ones go signal on landing
+        const flash = g.flash;
 
-        // Line work: ridge lines (terrain) → rungs & strands (helix). Revealed per row by rowSpan
-        // (trim-on), faded out as the collapse starts.
-        const lineA = smoothstep(B2 - 0.04, B2 + 0.04, t) * (1 - smoothstep(TC0 + 0.06, TC0 + 0.2, t));
-        // Hidden-line removal only while the landscape is settled.
-        const occA = smoothstep(B2 + 0.1, B2 + 0.24, t) * (1 - smoothstep(B3 - 0.1, B3 + 0.0, t));
-        const heatT = seg(t, 1.6, 1.75); // everything glows signal by the end
-
-        // ── particle painter (depth-cued size/alpha/tint, DOF bokeh, self motion blur)
-        let lastStyle = '';
-        ctx.lineCap = 'round';
-        const style = (col) => { if (col !== lastStyle) { ctx.strokeStyle = ctx.fillStyle = col; lastStyle = col; } };
-        const drawParticle = (i) => {
+        // ── per-particle draw params: colour (atlas cell), radius, alpha
+        const prep = (i) => {
           const ck = CK[i];
-          if (ck > 0.985) return; // swallowed by the dot
+          if (ck > 0.985) { CIDX[i] = SKIP; return; }
           const sRel = S0[i] / s0;
-          const fog = clamp((1.14 - sRel) / 0.6);
-          const lit = LIT[i];
-          let rr = SZ[i] * 1.2 * Math.pow(sRel, 2.3) * sizeK * (1 - 0.45 * ck) * (0.82 + 0.18 * lit);
-          rr = rr < 0.5 ? 0.5 : rr > 5 ? 5 : rr;
-          const heat = Math.max(smoothstep(0, 0.35, ck), heatT);
-          let a = Math.min(1, Math.max(lerp(1, 0.16, Math.pow(fog, 0.85)), heat * 0.95) + 0.5 * g.flash * (1 - fog * 0.5));
-          a = Math.min(1, a * lit);
-          if (CLS[i] === 0) a *= 1 - 0.55 * occA; // in the landscape the ridge lines lead, dots texture them
-          rr *= 1 + 0.35 * g.flash;
-          const x = X0[i], y = Y0[i];
-          const dx = x - X1[i], dy = y - Y1[i];
-          const moving = dx * dx + dy * dy > 0.6;
-
-          // Lime sparks: always crisp, with a tight halo — a pop, never a blur.
-          if (CLS[i] === 2 && heat < 0.5) {
-            style(P.lime);
-            ctx.globalAlpha = 0.18 * a;
-            ctx.beginPath(); ctx.arc(x, y, rr * 3.2, 0, TAU); ctx.fill();
-            ctx.globalAlpha = a;
-            ctx.lineWidth = rr * 2.2;
-            ctx.beginPath(); ctx.moveTo(X1[i], Y1[i]); ctx.lineTo(x + 0.01, y); ctx.stroke();
-            return;
-          }
-          let col;
-          if (CLS[i] !== 0 || heat > 0.97) col = P.signal;
-          else if (heat > 0) col = lutHeat[Math.round(heat * (LUT_N - 1))];
-          else col = lutFog[Math.round(fog * (LUT_N - 1))];
-
-          const coc = (dofK * Math.abs(D0[i] - dF)) / D0[i];
-          const reff = rr + coc;
-          if (reff > 2.6) {
-            // out of focus: the particle's energy spreads over its circle of confusion
-            const ab = a * clamp(((rr * rr) / (reff * reff)) * 2.6, 0.045, 1);
-            if (moving) {
-              // a blurred disc smeared along its path: energy spreads over the streak length
-              style(col);
-              ctx.globalAlpha = (ab * 2 * reff) / (2 * reff + Math.sqrt(dx * dx + dy * dy));
-              ctx.lineWidth = reff * 2;
-              ctx.beginPath(); ctx.moveTo(X1[i], Y1[i]); ctx.lineTo(x, y); ctx.stroke();
+          const q = clamp((sRel - 0.82) / 0.46); // depth tier: 0 far … 1 near
+          let a, r;
+          if (q < 0.5) { const u = q / 0.5; a = lerp(0.35, 0.7, u); r = lerp(1.2, 2.5, u); }
+          else { const u = (q - 0.5) / 0.5; a = lerp(0.7, 1, u); r = lerp(2.5, 4.3, u); }
+          r *= SZ[i];
+          a *= clamp(0.62 + 0.4 * LIT[i], 0.78, 1);
+          a = Math.min(1, a + 0.45 * flash * (1 - q));
+          r *= (1 + 0.25 * flash) * (1 - 0.45 * ck) * sizeK * (1 - 0.3 * occA);
+          const heat = Math.max(smoothstep(0.12, 0.55, ck), heatT);
+          let c;
+          if (CLS[i] === 2 && heat < 0.5) { c = C_LIME; r = Math.max(r, 2.2); a = 1; }
+          else if (CLS[i] === 1 || heat > 0.97) { c = C_SIG; a = Math.max(a, lerp(0.6, 1, q)); r = Math.max(r, 1.8); }
+          else if (heat > 0.05) { c = C_HEAT + Math.min(HEATS - 1, Math.floor(heat * HEATS)); a = Math.max(a, heat * 0.95); }
+          else c = Math.round(q * (TIERS - 1));
+          if (CLS[i] === 0 && heat < 0.05) a *= 1 - 0.3 * occA; // in the landscape the lines lead
+          r = r < 0.6 ? 0.6 : r;
+          const dx = X0[i] - X1[i], dy = Y0[i] - Y1[i], d2 = dx * dx + dy * dy;
+          // streaks: keep them punchy, but let long ones thin out (sqrt energy falloff)
+          if (d2 > 0.36) a *= Math.sqrt((2 * r + 2) / (2 * r + 2 + Math.sqrt(d2)));
+          if (a < 0.01) { CIDX[i] = SKIP; return; }
+          CIDX[i] = c; RAD[i] = r; ALPHA[i] = a;
+        };
+        // Draw a list of particles from the atlas. A moving dot is the disc stretched from its
+        // sub-sample-earlier position to now (the engine's samples fuse these into streaks).
+        const A = atlas();
+        const BT = ctx.getTransform();
+        const drawList = (list, n) => {
+          let rot = false;
+          for (let k = 0; k < n; k++) {
+            const i = list[k], c = CIDX[i];
+            if (c === SKIP) continue;
+            ctx.globalAlpha = ALPHA[i];
+            const x = X0[i], y = Y0[i], r = RAD[i];
+            const big = r >= 1.8, cell = big ? CL : CS, sy = big ? 0 : CL, kk = big ? CL / 2 / RL : CS / 2 / RS;
+            const dx = x - X1[i], dy = y - Y1[i], d2 = dx * dx + dy * dy;
+            if (d2 > 0.36) {
+              const l = Math.sqrt(d2), ca = dx / l, sa = dy / l, mx = (x + X1[i]) * 0.5, my = (y + Y1[i]) * 0.5;
+              ctx.setTransform(BT.a * ca + BT.c * sa, BT.b * ca + BT.d * sa, -BT.a * sa + BT.c * ca, -BT.b * sa + BT.d * ca,
+                BT.a * mx + BT.c * my + BT.e, BT.b * mx + BT.d * my + BT.f);
+              rot = true;
+              const hw = (l * 0.5 + r) * kk, hh = r * kk;
+              ctx.drawImage(A, c * CL, sy, cell, cell, -hw, -hh, 2 * hw, 2 * hh);
             } else {
-              ctx.globalAlpha = ab;
-              const q = reff * SPR_K;
-              ctx.drawImage(sprite(col.startsWith('#') ? R.col.rgba(col, 1) : col), x - q, y - q, q * 2, q * 2);
+              if (rot) { ctx.setTransform(BT); rot = false; }
+              const q = r * kk;
+              ctx.drawImage(A, c * CL, sy, cell, cell, x - q, y - q, 2 * q, 2 * q);
             }
-            return;
           }
-          style(col);
-          ctx.globalAlpha = a;
-          if (moving) {
-            // in focus: keep streaks punchy, but let long ones thin out (sqrt energy falloff)
-            ctx.globalAlpha = a * Math.sqrt((2 * rr + 2) / (2 * rr + 2 + Math.sqrt(dx * dx + dy * dy)));
-            ctx.lineWidth = rr * 2;
-            ctx.beginPath(); ctx.moveTo(X1[i], Y1[i]); ctx.lineTo(x, y); ctx.stroke();
-          } else {
-            ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
-          }
+          if (rot) ctx.setTransform(BT);
         };
 
-        // Row line style: depth-cued; DOF widens + fades out-of-focus rows. Two rows are signal
-        // accents — a highlighted series in the landscape, two coloured base pairs in the helix.
-        const strokeRow = (r) => {
+        // ── row styling
+        const rowState = (r) => {
           const i = GRID[r * COLS + (COLS >> 1)];
+          const m = t < B3 - 0.25 ? 0 : mixCD(i, t);
+          return { i, m, closed: m > 0.999 && rowSpan(r, t) >= 1 };
+        };
+        const strokeRow = (r, st) => {
+          const i = st.i;
           const sRel = S0[i] / s0;
-          const fog = clamp((1.2 - sRel) / 0.55);
-          const coc = (dofK * Math.abs(D0[i] - dF)) / D0[i];
+          const q = clamp((sRel - 0.62) / 0.9);
+          const ck = CK[i];
           const accent = r === ACCENT_A || r === ACCENT_B;
-          ctx.globalAlpha = Math.min(1, (lineA * lerp(0.9, 0.2, fog)) / (1 + coc * 0.25) * (accent ? 1 : 0.85) * (1 + 0.6 * g.flash));
-          ctx.lineWidth = (lerp(0.8, 1.35, clamp(sRel - 0.6)) * (accent ? 1.5 : 1) + coc * 0.3) * sizeK;
-          ctx.strokeStyle = accent ? P.signal : P.bone;
-          lastStyle = '';
-          ctx.beginPath(); rowPath(ctx, r, rowSpan(r, t)); ctx.stroke();
+          const land = 1 - smoothstep(0.82, 0.97, ck);
+          const a = lineA * land * Math.min(1, lerp(0.25, 0.9, q) * (accent ? 1.1 : 1) * (1 + 0.5 * flash));
+          if (a <= 0.004) return;
+          const heat = Math.max(smoothstep(0.12, 0.55, ck), heatT);
+          ctx.globalAlpha = a;
+          ctx.lineWidth = lerp(1.3, 1.75, q) * (accent ? 1.35 : 1) * (1 - 0.35 * ck) * sizeK;
+          ctx.strokeStyle = accent ? P.signal : heat > 0.02 ? lutHeat[Math.round(heat * 15)] : P.bone;
+          ctx.beginPath();
+          const n = rowPts(r, rowSpan(r, t), X0, Y0, RP_X, RP_Y);
+          if (n < 2) return;
+          if (st.closed) smoothClosed(ctx, RP_X, RP_Y, n); else smoothOpen(ctx, RP_X, RP_Y, n);
+          ctx.stroke();
+        };
+        // Mountain band: from the ridge line down to the row's own ground line. Filled with the
+        // backdrop, it hides whatever of the rows behind sits under the ridge — in the landscape
+        // (ground below) and in the tunnel (ground = the wall, ridges pointing at the axis).
+        const occludeRow = (r, st) => {
+          const span = rowSpan(r, t);
+          const n = rowPts(r, span, X0, Y0, RP_X, RP_Y);
+          const nb = rowPts(r, span, BX, BY, RB_X, RB_Y);
+          if (n < 2 || nb < 2) return;
+          ctx.beginPath();
+          if (st.closed) {
+            smoothClosed(ctx, RP_X, RP_Y, n);
+            ctx.moveTo(RB_X[0], RB_Y[0]);
+            for (let k = 1; k < nb; k++) ctx.lineTo(RB_X[k], RB_Y[k]);
+            ctx.closePath();
+          } else {
+            smoothOpen(ctx, RP_X, RP_Y, n);
+            for (let k = nb - 1; k >= 0; k--) ctx.lineTo(RB_X[k], RB_Y[k]);
+            ctx.closePath();
+          }
+          ctx.globalAlpha = occA;
+          ctx.fillStyle = P.ink; ctx.fill('evenodd');
         };
 
+        for (let i = 0; i < N; i++) prep(i);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         if (occA > 0.01) {
-          // Landscape mode: back → front, row by row: occlude, stroke the ridge, draw its dots.
-          const bottom = H + 300;
+          // Landscape / tunnel: back → front, row by row: occlude, stroke the ridge, its dots.
           for (let r = 0; r < ROWS; r++) {
-            const span = rowSpan(r, t);
-            ctx.beginPath();
-            const n = rowPath(ctx, r, span);
-            if (n) {
-              // full rows extend past their ends so the far plains stay occluded off-frame
-              const ext = span >= 1 ? 400 : 0;
-              const xL = RP_X[0], yL = RP_Y[0], xR = RP_X[n - 1], yR = RP_Y[n - 1];
-              ctx.lineTo(xR + ext, yR); ctx.lineTo(xR + ext, bottom); ctx.lineTo(xL - ext, bottom); ctx.lineTo(xL - ext, yL);
-              ctx.closePath();
-            }
-            ctx.globalAlpha = occA;
-            ctx.fillStyle = P.ink; ctx.fill();
-            if (bgGrad) { ctx.fillStyle = bgGrad; ctx.fill(); }
-            lastStyle = '';
-            if (r % stride === 0) strokeRow(r);
-            for (let c = 0; c < COLS; c += stride) drawParticle(GRID[r * COLS + c]);
+            const st = rowState(r);
+            occludeRow(r, st);
+            if (r % stride === 0) strokeRow(r, st);
+            let n = 0;
+            for (let c = 0; c < COLS; c += stride) ROWIDX[n++] = GRID[r * COLS + c];
+            drawList(ROWIDX, n);
           }
         } else {
-          if (lineA > 0.005) for (let r = 0; r < ROWS; r += stride) strokeRow(r);
-          lastStyle = '';
-          for (let i = 0; i < N; i++) ORDER[i] = i;
-          ORDER.sort((a, b) => D0[b] - D0[a]); // far → near
-          for (let n = 0; n < N; n++) {
-            const i = ORDER[n];
-            if (stride > 1 && i % stride) continue;
-            drawParticle(i);
-          }
+          if (lineA > 0.005) for (let r = 0; r < ROWS; r += stride) strokeRow(r, rowState(r));
+          let n = 0;
+          for (let i = 0; i < N; i += stride) ORDER[n++] = i;
+          ORDER.subarray(0, n).sort((a, b) => D0[b] - D0[a]); // painter's order: far → near
+          drawList(ORDER, n);
         }
+
+        if (detail >= 0.6) drawCallouts(ctx, t, api, g);
       }
 
-      drawAtmosphere(ctx, g, atmoA, 1, true); // near motes: in front of everything
+      drawGlow(ctx, 0.9 * glowA);
 
-      // ── the signal dot: accretes as the arms land, pops, settles to r=14 ───
+      // ── the signal dot: accretes as the rings land, pops on the last one, settles to r=14 ──
       if (t >= T_DOT0) {
-        const r = R.keys(t, [[T_DOT0, 0], [1.775, 10, 'quadOut'], [T_DOTPK, 17.5, 'expoOut'], [T_CLEAN, 14, 'sineInOut']]);
+        const r = R.keys(t, [[T_DOT0, 0], [1.52, 4, 'backOut'], [1.72, 5.5], [1.805, 10, 'quadOut'], [T_DOTPK, 18, 'expoOut'], [T_CLEAN, 14, 'sineInOut']]);
         ctx.globalAlpha = 1;
         ctx.fillStyle = P.signal;
         ctx.beginPath(); ctx.arc(CX, CY, r, 0, TAU); ctx.fill();
       }
 
       // ── post (main render only; panels must not touch the host frame's post state).
-      // Bloom surges on the burst and on the dot pop, and is exactly 0 on both contract frames.
+      // Bloom: a 150 ms surge on the burst, a steady low glow on the bone particles, a kick on the
+      // dot pop; exactly 0 by the contract frames.
       if (detail === 1) {
-        const on = smoothstep(T_BURST, T_BURST + 0.01, t) * (1 - smoothstep(1.795, T_CLEAN - 0.004, t));
-        const surge = 0.7 * (1 - E.quadOut(seg(tb, 0, 0.16))) + 0.5 * bump(t - 1.74, 0.045);
-        api.post.bloom = Math.max(api.post.bloom || 0, (0.4 + surge) * on);
+        const off = 1 - smoothstep(1.83, T_CLEAN - 0.003, t);
+        const surge = 0.6 * (1 - E.quadOut(seg(tb, 0, 0.15))) + 0.35 * bump(t - T_DOTPK + 0.02, 0.03);
+        api.post.bloom = Math.max(api.post.bloom || 0, (0.16 + surge) * off);
       }
     },
   });

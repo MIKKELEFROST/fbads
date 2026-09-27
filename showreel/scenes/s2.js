@@ -9,7 +9,8 @@
 //                       its tittle is the reel's dot, dropping in on the off-beat 8th
 //    0.938  RHYTHM      "is" collapses to a hairline that splits into rules; variable
 //                       weight travels through the word one letter per 16th             (ink)
-//    1.406  TIMING      diagonal ultra wipe; letters drop, squash & spring on the 32nds (ultra)
+//    1.406  TIMING      diagonal ultra wipe floods on the beat; letters drop, squash & spring
+//                       on 32nd-note triplets                                           (ultra)
 //    1.875  &           bone iris; font-editor trace (outline, anchors, guides) → fill
 //                       snaps on the off-beat 8th                                       (bone)
 //    2.344  FLOW        ink wave; letters rise on a travelling sine; camera dives through
@@ -44,12 +45,17 @@
   const WIND0 = BLADE1; // halves shear against each other (wind-up) until the beat
   const IS_DOT = T.SLICE + BEAT / 2, IS_DOT_FALL = 0.17; // tittle-dot lands on the off-beat 8th
   const IS_ST0 = T.RHY - 0.14, IS_COL0 = T.RHY - 0.058; // "is": stretch → collapse to a hairline
-  const WIPE0 = T.TIM - 0.16, WIPE1 = T.TIM - 0.012; // ultra wipe completes just before T lands
-  const LAND_STEP = S32, FALL = 0.2, DROP_H = 920; // TIMING drop
+  // ultra wipe: accelerates across the frame over the 3 frames before the beat (f194–f196) and its
+  // edge clears the last corner exactly ON the beat, so the flood IS the slam (full ultra from f197)
+  const WIPE0 = T.TIM - 0.12, WIPE1 = T.TIM;
+  // TIMING drop: letters land on consecutive 32nd-note triplets (BEAT/12), so the whole word is
+  // down and settled ≥150 ms before the & iris opens
+  const LAND_STEP = BEAT / 12, FALL = 0.16, DROP_H = 800;
   const FILL = T.AMP + BEAT / 2; // ampersand fill snaps on the off-beat 8th
   const WAVE0 = T.FLOW - 0.095, WAVE1 = T.FLOW + 0.05; // ink wave
-  const ZOOM0 = T.FLOW + 0.14, ZOOM1 = T.END - 0.0125; // counter dive
-  const ZOOM_COVER_U = 0.9; // fraction of the dive at which the counter swallows the frame
+  // counter dive: ln s = ln S · v³ from ZOOM0; the counter swallows the frame exactly at COVER,
+  // i.e. between the last sub-sample of f280 (lt 2.7995) and f281 (lt 2.8083) — the final s2 frame
+  const ZOOM0 = T.FLOW + 0.14, COVER = T.END - 0.008;
 
   // Full-frame fill. Overdraws generously so the global camera shake never reveals the
   // engine's ink underlay at the frame edges.
@@ -57,6 +63,53 @@
     ctx.fillStyle = col;
     ctx.fillRect(-300, -300, W + 600, H + 600);
   };
+
+  // ── temporal box filters ─────────────────────────────────────────────────────────────────
+  // Even 16 motion-blur sub-samples leave contour steps on s2's fastest HARD edges (disc and iris
+  // fronts, the plates, the wipe, the wave crest, the dive: 250–550 px inside one 180° shutter).
+  // Those edges are box-filtered analytically across the sub-sample interval SD = api.subDt
+  // (exact for constant velocity inside it). SD = 0 (no motion blur, or inside an s6 panel)
+  // reproduces the crisp single-sample frame exactly.
+  let SD = 0;
+  const sub = (lt, i, n) => lt + ((i + 0.5) / n) * SD; // i-th of n sub-times inside the interval
+  // fraction of the interval a point at radius ρ spends inside a disc whose radius moves a → b
+  function inDisc(rho, a, b) {
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    if (rho <= lo) return 1;
+    if (rho >= hi) return 0;
+    return (hi - rho) / (hi - lo);
+  }
+  // Annulus (ri* = 0: a disc) whose radii move ro0 → ro1, ri0 → ri1. Coverage is inDisc(outer) −
+  // inDisc(inner): piecewise linear in ρ between the four radii → one exact radial gradient.
+  function blurAnnulus(ctx, ro0, ro1, ri0, ri1, col) {
+    ri0 = Math.max(0, ri0);
+    ri1 = Math.max(0, ri1);
+    const rmax = Math.max(ro0, ro1);
+    if (rmax <= 0.05) return;
+    ctx.beginPath();
+    if (Math.abs(ro1 - ro0) < 0.5 && Math.abs(ri1 - ri0) < 0.5) {
+      ctx.fillStyle = col; // (near-)static: crisp
+      ctx.arc(CX, CY, ro0, 0, TAU);
+      if (ri0 > 0.05) ctx.arc(CX, CY, ri0, 0, TAU, true);
+      ctx.fill();
+      return;
+    }
+    const g = ctx.createRadialGradient(CX, CY, 0, CX, CY, rmax);
+    for (const r of [0, ri0, ri1, ro0, ro1].sort((a, b) => a - b)) {
+      const c = clamp(inDisc(r, ro0, ro1) - (ri0 + ri1 > 0 ? inDisc(r, ri0, ri1) : 0));
+      g.addColorStop(Math.min(1, r / rmax), R.col.rgba(col, c));
+    }
+    ctx.fillStyle = g;
+    ctx.arc(CX, CY, rmax, 0, TAU);
+    ctx.fill();
+  }
+  // Straight edges (plates, wipe) get a linear coverage ramp across their sweep; the wave crest is
+  // painted as nested sub-time regions (alphas 1/n … 1/1 → exact coverage for identical content);
+  // the FLOW glyphs over flat ink are averaged additively (bone − ink per sub-time fill).
+  const BONE_OVER_INK = (() => {
+    const a = R.col.vec(P.bone), b = R.col.vec(P.ink);
+    return `rgb(${[0, 1, 2].map((k) => Math.round((a[k] - b[k]) * 255)).join(',')})`;
+  })();
 
   // ── static data ──────────────────────────────────────────────────────────────────────────
   // Detonation shards: radial speed-lines with staggered launch, reach and tail lag.
@@ -89,7 +142,8 @@
         return { path: L.path, cx: (b[0] + b[2]) / 2, cy: -cap / 2 };
       });
       const all = bounds(o.letters.flatMap((L) => L.contours));
-      G.motion = { letters, ox: CX - (all[0] + all[2]) / 2, base: CY + cap / 2 };
+      const ox = CX - (all[0] + all[2]) / 2, base = CY + cap / 2;
+      G.motion = { letters, ox, base, box: [ox + all[0], base + all[1], ox + all[2], base + all[3]] };
     }
 
     // "is" — Instrument Serif italic, centred on its ink box.
@@ -115,7 +169,7 @@
     // RHYTHM — Inter Tight variable (cap height 1490/2048).
     {
       const size = 250, cap = (1490 / 2048) * size;
-      G.rhy = { size, cap, track: -5, base: CY + cap / 2, gap: cap / 2 + 52, ruleW: 1400 };
+      G.rhy = { size, cap, base: CY + cap / 2, gap: cap / 2 + 52, ruleW: 1400 };
     }
 
     // TIMING — Unbounded 800 via the variable webfont; static per-letter layout.
@@ -212,9 +266,7 @@
       }
       let cover = 1;
       while (cover < 1000 && !probe.every(([dx, dy]) => inPoly(c[0] + dx / cover, c[1] + dy / cover, Oc))) cover *= 1.01;
-      // log-space dive: ln s = ln S · u³, so cover is reached at u = ZOOM_COVER_U
-      const zoomMax = clamp(Math.exp(Math.log(cover) / Math.pow(ZOOM_COVER_U, 3)), 60, 140);
-      G.flow = { letters, cx: c[0], cy: c[1], cover, zoomMax };
+      G.flow = { letters, cx: c[0], cy: c[1], cover };
     }
     return G;
   }
@@ -267,6 +319,10 @@
   //  I · DETONATION + MOTION + SLICE
   // ═════════════════════════════════════════════════════════════════════════════════════════
   const discR = (lt) => 1190 * E.expoOut(seg(lt, 0, 0.28));
+  // shockwave: the dot itself hollows out into a ring that races ahead of the disc and thins.
+  // At lt = 0 this is exactly the contract dot (outer 28, inner 0).
+  const shockR = (lt) => 28 + 1500 * E.expoOut(seg(lt, 0, 0.3));
+  const shockTh = (lt) => lerp(28, 1.5, E.expoOut(seg(lt, 0, 0.1)));
 
   function shardPath(ctx, lt, detail) {
     ctx.beginPath();
@@ -294,12 +350,7 @@
     const rd = discR(lt);
     const covered = rd > 1140;
     if (covered) fillBg(ctx, P.signal);
-    else if (rd > 0.5) {
-      ctx.fillStyle = P.signal;
-      ctx.beginPath();
-      ctx.arc(CX, CY, rd, 0, TAU);
-      ctx.fill();
-    }
+    else blurAnnulus(ctx, rd, discR(lt + SD), 0, 0, P.signal);
     // shards: bone where they fly over ink, ink where they streak across the signal
     if (lt < 0.45) {
       if (!covered) {
@@ -324,75 +375,86 @@
       ctx.fill();
       ctx.restore();
     }
-    // shockwave: the dot itself hollows out into a ring that races ahead of the disc and thins.
-    // At lt = 0 this is exactly the contract dot (outer 28, inner 0).
-    const ro = 28 + 1500 * E.expoOut(seg(lt, 0, 0.3));
+    const ro = shockR(lt);
     if (ro < 1260) {
-      const th = lerp(28, 1.5, E.expoOut(seg(lt, 0, 0.1)));
-      ctx.beginPath();
-      ctx.arc(CX, CY, ro, 0, TAU);
-      if (ro - th > 0.05) ctx.arc(CX, CY, ro - th, 0, TAU, true);
-      ctx.fillStyle = P.bone;
-      ctx.fill();
+      const ro1 = shockR(lt + SD);
+      blurAnnulus(ctx, ro, ro1, ro - shockTh(lt), ro1 - shockTh(lt + SD), P.bone);
     }
   }
 
-  // Per-letter slam: from scale 1.8, accelerating into the surface (quadIn), hard contact, then a
-  // short damped squash. Rings stagger outward from the centre pair (T, I) by 25 ms.
+  // Per-letter slam: each letter drops out of the lens onto the plate — scaled about the FRAME
+  // centre (the camera axis), accelerating (quadIn), hard contact, then a short damped squash about
+  // its own centre. Rings stagger outward from the centre pair (T, I) by 25 ms. Because the outer
+  // letters start later they are always both bigger and further out than the inner ones, so the
+  // word can never pile up on itself: every frame reads as clean, separate letters converging.
+  // Letters pop in at full opacity (an alpha ramp averaged over the shutter reads as ghosts). Ring
+  // starts sit just before frame times (f116, f117, f119) and after the previous frame's shutter
+  // closes, so no letter is ever half-exposed on its first frame.
   const SLAM_RING = [2, 1, 0, 0, 1, 2];
-  const SLAM0 = 0.05, SLAM_STEP = 0.025, SLAM_IN = 0.075;
+  const SLAM_AT = [0.05, 0.074, 0.1], SLAM_IN = 0.075, SLAM_S0 = 1.6;
   function slam(tau, i) {
-    let s, rot = 0;
+    let z = 1, s = 1, rot = 0;
     if (tau < SLAM_IN) {
       const u = E.quadIn(tau / SLAM_IN);
-      s = lerp(1.8, 1, u);
-      rot = (i % 2 ? 1 : -1) * 5 * DEG * (1 - u);
+      z = lerp(SLAM_S0, 1, u);
+      rot = (i % 2 ? 1 : -1) * 4 * (1 - u); // degrees
     } else {
       const k = tau - SLAM_IN;
       s = 1 - 0.07 * Math.exp(-k * 15) * Math.sin(k * 40);
     }
-    return { s, rot, a: clamp(tau / 0.012) };
+    return { z, s, rot };
   }
 
-  function drawMotionWord(ctx, lt) {
+  // The word as one Path2D in frame space (offset by dx, dy), so it can be filled, partitioned and
+  // box-filtered like any other shape.
+  function motionPath(lt, dx = 0, dy = 0) {
     const g = G.motion;
     const push = 1 + 0.035 * E.sineInOut(seg(lt, 0.2, 0.75)); // slow push-in during the hold
-    ctx.save();
-    ctx.translate(CX, CY);
-    ctx.scale(push, push);
-    ctx.translate(-CX, -CY);
-    ctx.translate(g.ox, g.base);
-    ctx.fillStyle = P.ink;
+    const base = new DOMMatrix().translate(dx + CX, dy + CY).scale(push, push).translate(-CX, -CY);
+    const p = new Path2D();
     for (let i = 0; i < g.letters.length; i++) {
-      const tau = lt - (SLAM0 + SLAM_RING[i] * SLAM_STEP);
-      if (tau <= 0) continue;
+      const tau = lt - SLAM_AT[SLAM_RING[i]];
+      if (tau < 0) continue;
       const L = g.letters[i];
-      const { s, rot, a } = slam(tau, i);
-      ctx.save();
-      ctx.globalAlpha = a;
-      ctx.translate(L.cx, L.cy);
-      ctx.rotate(rot);
-      ctx.scale(s, s);
-      ctx.translate(-L.cx, -L.cy);
-      ctx.fill(L.path);
-      ctx.restore();
+      const { z, s, rot } = slam(tau, i);
+      const m = base
+        .translate(CX, CY) // approach: along the camera axis
+        .scale(z, z)
+        .translate(g.ox + L.cx - CX, g.base + L.cy - CY) // contact: squash + settle about the letter
+        .rotate(rot)
+        .scale(s, s)
+        .translate(-L.cx, -L.cy);
+      p.addPath(L.path, m);
     }
-    ctx.restore();
+    return p;
   }
 
-  // Anticipation: a bone blade traces the cut line left → right just before the beat.
+  // Anticipation: a bone blade traces the cut line left → right just before the beat. Its head
+  // outruns the shutter, so the span it sweeps inside the interval is drawn as a fading ramp.
+  const bladeHead = (lt) => lerp(-60, W + 60, E.expoOut(seg(lt, BLADE0, BLADE1)));
   function drawBlade(ctx, lt) {
-    if (lt < BLADE0) return;
-    const head = lerp(-60, W + 60, E.expoOut(seg(lt, BLADE0, BLADE1)));
+    if (lt + SD < BLADE0) return;
+    const h0 = bladeHead(lt), h1 = bladeHead(lt + SD);
     ctx.fillStyle = P.bone;
-    ctx.fillRect(-60, CY - 1.5, head + 60, 3);
+    ctx.fillRect(-60, CY - 1.5, h0 + 60, 3);
+    if (h1 - h0 > 0.5) {
+      const g = ctx.createLinearGradient(h0, 0, h1, 0);
+      g.addColorStop(0, R.col.rgba(P.bone, 1));
+      g.addColorStop(1, R.col.rgba(P.bone, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(h0, CY - 1.5, h1 - h0, 3);
+    }
   }
 
   const whipOut = E.bezier(0.45, 0, 0.12, 1); // whip with a quicker break-away than R.ease.whip
+  const windAt = (lt) => 16 * E.sineInOut(seg(lt, WIND0, T.SLICE)) * (1 - E.expoOut(seg(lt - T.SLICE, 0, 0.06)));
+  // side −1: top half → left / up, +1: bottom half → right / down
+  const plateX = (lt, side) => 2250 * whipOut(seg(lt - T.SLICE, side < 0 ? 0 : 0.018, side < 0 ? 0.22 : 0.238)) - windAt(lt);
   function actMotion(ctx, lt, api) {
     if (lt < WIND0) {
       drawDetonation(ctx, lt, api.detail);
-      drawMotionWord(ctx, lt);
+      ctx.fillStyle = P.ink;
+      ctx.fill(motionPath(lt));
       drawBlade(ctx, lt);
       return;
     }
@@ -400,22 +462,64 @@
     // on the beat they pop apart vertically and whip off-frame, bottom trailing the top.
     if (lt >= T.SLICE) drawIs(ctx, lt);
     const tau = lt - T.SLICE;
-    const wind = 16 * E.sineInOut(seg(lt, WIND0, T.SLICE)) * (1 - E.expoOut(seg(tau, 0, 0.06)));
     const gap = tau > 0 ? 36 * E.expoOut(clamp(tau / 0.12)) : 0;
+    const [bx0, by0, bx1, by1] = G.motion.box;
     for (const side of [-1, 1]) {
-      // side −1: top half → left / up, +1: bottom half → right / down
-      const X = 2250 * whipOut(seg(tau, side < 0 ? 0 : 0.018, side < 0 ? 0.22 : 0.238)) - wind;
+      const dy = side * gap;
+      const X0 = plateX(lt, side), X1 = plateX(lt + SD, side);
+      const lo = Math.min(X0, X1), hi = Math.max(X0, X1);
+      // Only the trailing edge is ever in frame (top: right edge, bottom: left edge). The core is
+      // what the plate covers for the whole sub-sample interval (its position at X = hi).
+      const edge = (X) => (side < 0 ? W + 300 - X : X - 300);
+      const y0 = side < 0 ? -300 + dy : CY + dy, hh = side < 0 ? CY + 300 : H - CY + 300;
       ctx.save();
-      ctx.translate(side * X, side * gap);
       ctx.beginPath();
-      if (side < 0) ctx.rect(-300, -300, W + 600, CY + 300);
-      else ctx.rect(-300, CY, W + 600, H - CY + 300);
+      if (side < 0) ctx.rect(-3000, y0, edge(hi) + 3000, hh);
+      else ctx.rect(edge(hi), y0, W + 3000, hh);
       ctx.clip();
       fillBg(ctx, P.signal);
-      drawMotionWord(ctx, lt);
+      // the glyphs whip as fast as the plate: inside the word's swept box, the exact running
+      // average of n sub-time plate images (signal partitioned around the glyphs, glyphs in ink)
+      const n = SD > 0 ? Math.min(6, Math.ceil((hi - lo) / 3)) : 1;
+      if (n <= 1) {
+        ctx.fillStyle = P.ink;
+        ctx.fill(motionPath(lt, side * X0, dy));
+      } else {
+        const m = 60;
+        ctx.beginPath();
+        ctx.rect(CX + (bx0 - CX) * 1.05 + side * (side < 0 ? hi : lo) - m, by0 + dy - m, (bx1 - bx0) * 1.05 + hi - lo + 2 * m, by1 - by0 + 2 * m);
+        ctx.clip();
+        for (let i = 0; i < n; i++) {
+          const glyphs = motionPath(lt, side * plateX(sub(lt, i, n), side), dy);
+          const bg = new Path2D();
+          bg.rect(-300, -300, W + 600, H + 600);
+          bg.addPath(glyphs);
+          ctx.globalAlpha = 1 / (i + 1);
+          ctx.fillStyle = P.signal;
+          ctx.fill(bg, 'evenodd');
+          ctx.fillStyle = P.ink;
+          ctx.fill(glyphs);
+        }
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+      // the edge's sweep inside the interval: a linear coverage ramp (exact for a straight edge)
+      if (hi - lo > 0.5) {
+        const e0 = edge(hi), e1 = edge(lo);
+        const g = ctx.createLinearGradient(e0, 0, e1, 0);
+        g.addColorStop(0, R.col.rgba(P.signal, 1));
+        g.addColorStop(1, R.col.rgba(P.signal, 0));
+        ctx.fillStyle = g;
+        ctx.fillRect(Math.min(e0, e1), y0, Math.abs(e1 - e0), hh);
+      }
       // the blade's residue: a hot bone edge on each cut face, cooling off after the beat
+      ctx.save();
+      ctx.beginPath();
+      if (side < 0) ctx.rect(-3000, y0, edge(X0) + 3000, hh);
+      else ctx.rect(edge(X0), y0, W + 3000, hh);
+      ctx.clip();
       ctx.fillStyle = R.col.rgba(P.bone, 1 - E.quadOut(clamp(tau / 0.18)));
-      ctx.fillRect(-300, side < 0 ? CY - 3 : CY, W + 600, 3);
+      ctx.fillRect(-300, (side < 0 ? CY - 3 : CY) + dy, W + 600, 3);
       ctx.restore();
     }
   }
@@ -499,15 +603,30 @@
     return out;
   }
 
+  // Optical spacing, re-solved every frame from each letter's INK bounds at its current weight
+  // (advance widths would let a black Y and a black T collide while a hairline pair floats apart).
+  // Straight–straight pairs get the reference gap — a touch looser between hairlines, tighter
+  // between blacks, as a type designer spaces the masters — and pairs with open shoulders (arms,
+  // diagonals, a T bar) are pulled in so the *area* between letters stays even.
+  const RHY_GAP_LIGHT = 36, RHY_GAP_BLACK = 20;
+  const RHY_KERN = { RH: -6, HY: -9, YT: -8, TH: -7, HM: 0 };
   function drawRhythmWord(ctx, lt) {
     const g = G.rhy;
     const wts = rhythmWeights(lt);
-    const adv = [];
-    let total = g.track * (RHY_WORD.length - 1);
-    for (let i = 0; i < RHY_WORD.length; i++) {
+    const n = RHY_WORD.length;
+    const abl = [], abr = [], gap = [0];
+    let total = 0;
+    for (let i = 0; i < n; i++) {
       R.font(ctx, { family: 'Inter Tight', weight: wts[i], size: g.size, align: 'left' });
-      adv[i] = ctx.measureText(RHY_WORD[i]).width;
-      total += adv[i];
+      const m = ctx.measureText(RHY_WORD[i]);
+      abl[i] = m.actualBoundingBoxLeft; // ink left = origin − abl
+      abr[i] = m.actualBoundingBoxRight; // ink right = origin + abr
+      total += abl[i] + abr[i];
+      if (i > 0) {
+        const heavy = ((wts[i - 1] + wts[i]) / 2 - 100) / 800;
+        gap[i] = lerp(RHY_GAP_LIGHT, RHY_GAP_BLACK, heavy) + (RHY_KERN[RHY_WORD[i - 1] + RHY_WORD[i]] || 0);
+        total += gap[i];
+      }
     }
     const drift = 1 + 0.03 * E.sineOut(seg(lt, T.RHY, T.TIM));
     ctx.save();
@@ -515,11 +634,12 @@
     ctx.scale(drift, drift);
     ctx.translate(-CX, -CY);
     ctx.fillStyle = P.bone;
-    let x = CX - total / 2; // re-laid out every frame so spacing stays even as widths breathe
-    for (let i = 0; i < RHY_WORD.length; i++) {
+    let ink = CX - total / 2; // the word's ink box is centred
+    for (let i = 0; i < n; i++) {
+      ink += gap[i];
       R.font(ctx, { family: 'Inter Tight', weight: wts[i], size: g.size, align: 'left' });
-      ctx.fillText(RHY_WORD[i], x, g.base);
-      x += adv[i] + g.track;
+      ctx.fillText(RHY_WORD[i], ink + abl[i], g.base);
+      ink += abl[i] + abr[i];
     }
     ctx.restore();
   }
@@ -594,10 +714,11 @@
     ctx.closePath();
   }
   const WIPE_BAND = 150; // the signal band rides ahead of the ultra edge
-  // travel spans only what the slanted edge needs to cross the frame, so the whip's fast middle
-  // is spent on-screen (≈4 readable frames) rather than off it
-  const WIPE_SPAN = (CY + 40) * TAN + WIPE_BAND + 20;
-  const wipeX = (lt) => lerp(-WIPE_SPAN, W + WIPE_SPAN, E.whip(seg(lt, WIPE0, WIPE1)));
+  // Travel starts just off-frame (band hidden) and ends exactly where the slanted ultra edge clears
+  // the bottom-right corner (+ shake margin). cubicIn: the edge accelerates into the hit, so the
+  // wipe reads on 3 frames and the frame is swallowed at full speed on the beat, not ahead of it.
+  const WIPE_FROM = -((CY + 40) * TAN + WIPE_BAND + 20), WIPE_TO = W + (H - CY + 40) * TAN;
+  const wipeX = (lt) => lerp(WIPE_FROM, WIPE_TO, E.cubicIn(seg(lt, WIPE0, WIPE1)));
 
   // An animator's timing chart under the word: key to key, in-betweens spaced by an ease-in-out
   // (dense at the keys). It draws on as the letters land.
@@ -617,7 +738,8 @@
     }
   }
 
-  // Letters land on consecutive 32nds (six 16ths would overrun the & downbeat by two 16ths).
+  // Letters land on consecutive 32nd-note triplets (a half-beat ruff): the last one is down at
+  // T.TIM + 0.195 and fully settled well before the & iris, leaving the whole word a real rest.
   function drawTimingWord(ctx, lt) {
     const g = G.tim;
     R.font(ctx, { family: 'Unbounded', weight: 800, size: g.size, spacing: -5, align: 'center' });
@@ -636,30 +758,54 @@
     drawTimingChart(ctx, lt, g.x0, g.x1, g.base + 72);
     ctx.fillStyle = P.bone;
     g.glyphs.forEach((gl, i) => {
-      const tau = lt - (T.TIM + i * LAND_STEP);
-      if (tau < -FALL) return;
-      let y, sx, sy;
-      if (tau < 0) {
-        // free fall (gravity: quadratic), stretching along the fall
-        const u = 1 + tau / FALL;
-        y = -DROP_H * (1 - u * u);
-        sy = 1 + 0.24 * u * u;
-        sx = 1 / Math.sqrt(sy);
-      } else {
-        // contact: squash, then a damped spring back through stretch to rest, tiny rebound
-        const q = 0.24 * Math.exp(-tau * 13) * Math.cos(tau * 36);
-        sy = 1 - q;
-        sx = 1 + q * 0.45;
-        y = -16 * Math.exp(-tau * 14) * Math.sin(tau * 30);
+      const t0 = T.TIM + i * LAND_STEP;
+      if (lt - t0 < -FALL && lt + SD - t0 < -FALL) return;
+      const x = g.ox + gl.x + gl.w / 2;
+      const s = dropState(lt - t0);
+      const dy = Math.abs(dropState(lt + SD - t0).y - s.y);
+      const n = SD > 0 ? Math.min(6, Math.ceil(dy / 2)) : 1;
+      if (n <= 1) {
+        if (lt - t0 < -FALL) return;
+        ctx.save();
+        ctx.translate(x, g.base + s.y);
+        ctx.scale(s.sx, s.sy); // pivot on the baseline: the squash stays grounded
+        ctx.fillText(gl.ch, 0, 0);
+        ctx.restore();
+        return;
       }
-      ctx.save();
-      ctx.translate(g.ox + gl.x + gl.w / 2, g.base + y);
-      ctx.scale(sx, sy); // pivot on the baseline: the squash stays grounded
-      ctx.fillText(gl.ch, 0, 0);
-      ctx.restore();
+      // A falling letter covers ~80 px inside one shutter: box-filter it across the sub-sample
+      // interval. n sub-time copies are summed additively as premultiplied bone at 1/n into a
+      // small clear layer (= bone at the exact average coverage), then composited once.
+      const L = R.layer('s2:drop', DROP_LW, DROP_LH);
+      const c = L.ctx;
+      R.font(c, { family: 'Unbounded', weight: 800, size: g.size, spacing: -5, align: 'center' });
+      c.globalCompositeOperation = 'lighter';
+      c.globalAlpha = 1 / n;
+      c.fillStyle = P.bone;
+      for (let j = 0; j < n; j++) {
+        const tj = sub(lt, j, n) - t0;
+        if (tj < -FALL) continue;
+        const q = dropState(tj);
+        c.setTransform(q.sx, 0, 0, q.sy, DROP_LW / 2, DROP_BASE + q.y - s.y);
+        c.fillText(gl.ch, 0, 0);
+      }
+      ctx.drawImage(L.canvas, x - DROP_LW / 2, g.base + s.y - DROP_BASE);
     });
     ctx.restore();
   }
+  // glyph state at tau seconds from its landing: free fall (gravity: quadratic, stretching along
+  // the fall), then contact: squash, a damped spring back through stretch to rest, tiny rebound
+  // (damped to < 1.5 % within ~150 ms so the word is truly still before the iris)
+  function dropState(tau) {
+    if (tau < 0) {
+      const u = 1 + Math.max(tau, -FALL) / FALL;
+      const sy = 1 + 0.24 * u * u;
+      return { y: -DROP_H * (1 - u * u), sx: 1 / Math.sqrt(sy), sy };
+    }
+    const q = 0.26 * Math.exp(-tau * 20) * Math.cos(tau * 40);
+    return { y: -16 * Math.exp(-tau * 20) * Math.sin(tau * 34), sx: 1 + q * 0.45, sy: 1 - q };
+  }
+  const DROP_LW = 420, DROP_LH = 480, DROP_BASE = 340; // layer for one box-filtered falling glyph
 
   function actTiming(ctx, lt) {
     if (lt >= WIPE1) {
@@ -667,15 +813,31 @@
       drawTimingWord(ctx, lt);
       return;
     }
-    const X = wipeX(lt);
-    ctx.fillStyle = P.signal;
-    slantPath(ctx, X + WIPE_BAND);
-    ctx.fill();
-    ctx.fillStyle = P.ultra;
-    slantPath(ctx, X);
-    ctx.fill();
+    // Both edges cross ~500 px inside one shutter, so each is box-filtered across the sub-sample
+    // interval: the region covered all along (edge at X0), plus the sweep X0 → X1 as a linear
+    // coverage ramp along the edge normal (1, tan) — exact for a straight edge.
+    const X0 = wipeX(lt), X1 = wipeX(lt + SD);
+    for (const [band, col] of [[WIPE_BAND, P.signal], [0, P.ultra]]) {
+      ctx.fillStyle = col;
+      slantPath(ctx, X0 + band);
+      ctx.fill();
+      if (X1 - X0 > 0.5) {
+        const a = X0 + band, b = X1 + band, k = (X1 - X0) / (1 + TAN * TAN);
+        const g = ctx.createLinearGradient(a, CY, a + k, CY + k * TAN);
+        g.addColorStop(0, R.col.rgba(col, 1));
+        g.addColorStop(1, R.col.rgba(col, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(a + (CY + 300) * TAN, -300);
+        ctx.lineTo(b + (CY + 300) * TAN, -300);
+        ctx.lineTo(b - (H - CY + 300) * TAN, H + 300);
+        ctx.lineTo(a - (H - CY + 300) * TAN, H + 300);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
     ctx.save();
-    slantPath(ctx, X);
+    slantPath(ctx, wipeX(lt + SD / 2));
     ctx.clip();
     drawTimingWord(ctx, lt);
     ctx.restore();
@@ -780,26 +942,22 @@
     ctx.restore();
   }
 
+  // thin bone ring racing ahead of the iris — rhymes with the opening shockwave
+  const irisRingR = (lt) => irisR(lt) * 1.16 + 14;
+  const irisRingTh = (lt) => lerp(10, 1.5, E.expoOut(seg(lt, T.AMP, T.AMP + 0.12)));
   function actAmp(ctx, lt) {
     const r = irisR(lt);
     if (r > 1140) fillBg(ctx, P.bone);
     else {
-      // thin bone ring racing ahead of the iris — rhymes with the opening shockwave
-      const ro = r * 1.16 + 14;
-      const th = lerp(10, 1.5, E.expoOut(seg(lt, T.AMP, T.AMP + 0.12)));
-      ctx.fillStyle = P.bone;
-      ctx.beginPath();
-      ctx.arc(CX, CY, ro, 0, TAU);
-      ctx.arc(CX, CY, Math.max(0, ro - th), 0, TAU, true);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(CX, CY, r, 0, TAU);
-      ctx.fill();
+      // both fronts box-filtered across the sub-sample interval
+      const ro = irisRingR(lt), ro1 = irisRingR(lt + SD);
+      blurAnnulus(ctx, ro, ro1, ro - irisRingTh(lt), ro1 - irisRingTh(lt + SD), P.bone);
+      blurAnnulus(ctx, r, irisR(lt + SD), 0, 0, P.bone);
     }
     ctx.save();
     if (r <= 1140) {
       ctx.beginPath();
-      ctx.arc(CX, CY, r, 0, TAU);
+      ctx.arc(CX, CY, irisR(lt + SD / 2), 0, TAU);
       ctx.clip();
     }
     drawAmp(ctx, lt);
@@ -809,9 +967,10 @@
   // ═════════════════════════════════════════════════════════════════════════════════════════
   //  VI · FLOW
   // ═════════════════════════════════════════════════════════════════════════════════════════
+  const crestY = (lt) => lerp(H + 190, -230, E.snap(seg(lt, WAVE0, WAVE1)));
   function wavePath(ctx, lt) {
     const u = seg(lt, WAVE0, WAVE1);
-    const yb = lerp(H + 190, -230, E.snap(u));
+    const yb = crestY(lt);
     const amp = 62 * (1 - 0.5 * u);
     ctx.beginPath();
     ctx.moveTo(-300, H + 300);
@@ -822,66 +981,111 @@
     ctx.closePath();
   }
 
-  // Ride-in: each letter surfaces from below (expoOut, staggered 20 ms) while a travelling sine
-  // runs through the line and dies out — the word *is* the wave for a moment, then it's still.
-  const RISE = 680, RISE_DUR = 0.2, RIDE_STAG = 0.02, RIDE_A = 40, RIDE_DECAY = 0.19; // starts below frame
+  // Ride-in: the letters surface inside the rising ink wave just behind its crest (expoOut,
+  // staggered 12 ms) and arrive ON the downbeat; then a travelling sine runs through the line and
+  // dies out — the word *is* the wave for a moment, then it's still.
+  const RISE = 560, RISE_DUR = 0.22, RISE_LEAD = 0.05, RIDE_STAG = 0.012, RIDE_A = 36, RIDE_DECAY = 0.24;
+  const riseStart = (i) => T.FLOW - RISE_LEAD + i * RIDE_STAG;
   function rideY(lt, i) {
-    const tau = lt - (T.FLOW + i * RIDE_STAG);
+    const tau = lt - riseStart(i);
     const rise = tau <= 0 ? RISE : RISE * (1 - E.expoOut(clamp(tau / RISE_DUR)));
     const env = 1 - E.sineOut(seg(lt, T.FLOW, T.FLOW + RIDE_DECAY));
     return rise + RIDE_A * env * Math.sin(TAU * 4.2 * (lt - T.FLOW) - i * 1.2);
   }
 
-  // Dive: ln s = ln S · u³ (constant-acceleration dolly in log space) → ~150 ms of near-still
-  // hold, then an exponential plunge that swallows the frame at u = ZOOM_COVER_U.
+  // Dive: ln s = ln S · v³ (constant-acceleration dolly in log space) → a near-still hold, then an
+  // exponential plunge that swallows the frame exactly at COVER (v = 1).
   function zoomScale(lt) {
-    const u = seg(lt, ZOOM0, ZOOM1);
-    const push = 1 + 0.03 * E.sineOut(seg(lt, T.FLOW + 0.05, ZOOM1)); // hold drift
-    return Math.exp(Math.log(G.flow.zoomMax) * u * u * u) * push;
+    const v = Math.max(0, (lt - ZOOM0) / (COVER - ZOOM0));
+    const push = 1 + 0.03 * E.sineOut(seg(lt, T.FLOW + 0.05, COVER)); // hold drift
+    return Math.exp(Math.log(G.flow.cover * 1.02) * v * v * v) * push;
   }
 
-  function drawFlow(ctx, lt) {
+  // The word as one Path2D in frame space (letters not yet surfacing are omitted).
+  function flowPath(lt) {
     const g = G.flow;
     const s = zoomScale(lt);
     const calm = 1 - clamp(Math.log(s) / Math.log(2.5)); // no residual ride once magnified
     const n = g.letters.length;
     const ys = g.letters.map((_, i) => rideY(lt, i) * calm);
-    ctx.save();
-    ctx.translate(CX, CY);
-    ctx.scale(s, s);
-    ctx.translate(-g.cx, -g.cy); // the O's counter centroid sits exactly on the frame centre
-    ctx.fillStyle = P.bone;
+    // the O's counter centroid sits exactly on the frame centre
+    const base = new DOMMatrix().translate(CX, CY).scale(s, s).translate(-g.cx, -g.cy);
+    const p = new Path2D();
     for (let i = 0; i < n; i++) {
-      if (lt <= T.FLOW + i * RIDE_STAG) continue;
+      if (lt <= riseStart(i)) continue;
       const L = g.letters[i];
       // tilt with the local slope of the wave traced by the neighbours
       const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
       const slope = Math.atan2(ys[b] - ys[a], g.letters[b].cx - g.letters[a].cx);
       const rot = clamp(slope * 0.5, -14 * DEG, 14 * DEG);
-      ctx.save();
-      ctx.translate(L.cx, L.cy + ys[i]);
-      ctx.rotate(rot);
-      ctx.translate(-L.cx, -L.cy);
-      ctx.fill(L.path);
-      ctx.restore();
+      p.addPath(L.path, base.translate(L.cx, L.cy + ys[i]).rotate(rot / DEG).translate(-L.cx, -L.cy));
     }
-    ctx.restore();
+    return p;
   }
 
   function actFlow(ctx, lt) {
-    const s = lt >= ZOOM0 ? zoomScale(lt) : 1;
-    if (s >= G.flow.cover * 1.02) return; // inside the counter: solid ink — the handoff contract
-    const waving = lt < WAVE1;
-    if (waving) {
-      ctx.fillStyle = P.ink;
-      wavePath(ctx, lt);
-      ctx.fill();
+    if (lt >= COVER) return; // inside the counter (s ≥ cover): solid ink — the handoff contract
+    if (lt < WAVE1) {
+      // Inside the wave: ink with the surfacing letters. The crest is box-filtered as nested
+      // sub-time regions; the content (ink partitioned around the glyphs, glyphs in bone) is the
+      // same for every region, so the nested sum is exact.
+      const glyphs = flowPath(lt);
+      const bg = new Path2D();
+      bg.rect(-300, -300, W + 600, H + 600);
+      bg.addPath(glyphs);
+      const paint = (t) => {
+        wavePath(ctx, t);
+        ctx.clip();
+        ctx.fillStyle = P.ink;
+        ctx.fill(bg, 'evenodd');
+        ctx.fillStyle = P.bone;
+        ctx.fill(glyphs);
+      };
+      const y0 = crestY(lt), y1 = crestY(lt + SD); // the crest rises: y1 ≤ y0
+      const n = SD > 0 ? Math.min(8, Math.ceil((y0 - y1) / 3)) : 1;
+      // the smallest sub-time region, fully covered …
       ctx.save();
-      wavePath(ctx, lt);
-      ctx.clip();
-    } else fillBg(ctx, P.ink);
-    drawFlow(ctx, lt);
-    if (waving) ctx.restore();
+      paint(sub(lt, 0, n));
+      ctx.restore();
+      if (n > 1) {
+        // … then the crest's sweep, restricted to the rows it crosses (fill-rate)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-300, y1 - 90, W + 600, y0 - y1 + 180);
+        ctx.clip();
+        for (let m = n - 1; m >= 1; m--) {
+          ctx.save();
+          ctx.globalAlpha = 1 / (m + 1);
+          paint(sub(lt, m, n));
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+      return;
+    }
+    fillBg(ctx, P.ink);
+    if (!(SD > 0)) {
+      ctx.fillStyle = P.bone;
+      ctx.fill(flowPath(lt));
+      return;
+    }
+    // Ride-in tail and the counter dive, box-filtered: every sub-frame is flat ink + bone glyphs,
+    // so adding (bone − ink)/n per sub-time glyph fill is the exact average (sub-times past COVER
+    // are solid ink and add nothing).
+    // n follows the fastest glyph displacement inside the interval (≈ 3 px per sub-step)
+    const s0 = zoomScale(lt), s1 = zoomScale(lt + SD);
+    let d = 1100 * Math.abs(Math.log(s1 / s0));
+    for (let i = 0; i < G.flow.letters.length; i++) d = Math.max(d, Math.abs(rideY(lt + SD, i) - rideY(lt, i)) * s0);
+    const n = Math.max(1, Math.min(8, Math.ceil(d / 3)));
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 1 / n;
+    ctx.fillStyle = BONE_OVER_INK;
+    for (let i = 0; i < n; i++) {
+      const t = sub(lt, i, n);
+      if (t < COVER) ctx.fill(flowPath(t));
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   // ═════════════════════════════════════════════════════════════════════════════════════════
@@ -896,9 +1100,41 @@
   }
 
   // ═════════════════════════════════════════════════════════════════════════════════════════
+  //  Motion blur: 4 point samples strobe into hard copies on the scene's fastest movers, so these
+  //  windows (local seconds) are rendered with 16 sub-samples instead.
+  // ═════════════════════════════════════════════════════════════════════════════════════════
+  const FAST = [
+    [0, 0.2], // shockwave rings, shards, MOTION slam
+    [BLADE0 - 0.02, T.SLICE + 0.27], // blade trace + slice whip
+    [IS_DOT - IS_DOT_FALL, IS_DOT + 0.04], // tittle drop
+    [IS_ST0 + 0.03, T.RHY + 0.02], // "is" collapses to a hairline
+    [T.TIM - FALL - 0.02, T.TIM + 5 * LAND_STEP + 0.06], // ultra wipe + TIMING drops
+    [T.AMP - 0.01, T.AMP + 0.12], // bone iris
+    [WAVE0 - 0.02, T.FLOW + 0.2], // ink wave + FLOW ride-in
+    [ZOOM0 + 0.13, T.END], // counter dive
+  ];
+  const samplesAt = (lt) => (FAST.some(([a, b]) => lt >= a && lt < b) ? 16 : 0);
+
+  function drawScene(ctx, lt, api) {
+    // I   detonation · MOTION · slice (the halves are gone by SLICE + 0.26)
+    if (lt < T.SLICE + 0.26) actMotion(ctx, lt, api);
+    // II  is — alone on ink
+    else if (lt < T.RHY) drawIs(ctx, lt);
+    // III RHYTHM — until the ultra wipe has covered it
+    if (lt >= T.RHY && lt < WIPE1) drawRhythm(ctx, lt);
+    // IV  TIMING — from the wipe until the iris floods the frame
+    if (lt >= WIPE0 && irisR(lt) < 1140) actTiming(ctx, lt);
+    // V   & — until the ink wave swallows it
+    if (lt >= T.AMP && lt < WAVE1) actAmp(ctx, lt);
+    // VI  FLOW → counter dive → ink
+    if (lt >= WAVE0) actFlow(ctx, lt);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════════════════════
   R.scene({
     id: 's2',
     shake: 1,
+    samplesAt,
     init() {
       geo(document.createElement('canvas').getContext('2d')); // warm glyph caches
     },
@@ -906,19 +1142,11 @@
     render(ctx, lt, api) {
       geo(ctx);
       pinContract(ctx, api, lt);
+      // s2 is a run of flat colour fields (signal, ultra, bone) and flat ink: keep them flat
+      api.post.vignette = 0.05;
 
-      // I   detonation · MOTION · slice (the halves are gone by SLICE + 0.26)
-      if (lt < T.SLICE + 0.26) actMotion(ctx, lt, api);
-      // II  is — alone on ink
-      else if (lt < T.RHY) drawIs(ctx, lt);
-      // III RHYTHM — until the ultra wipe has covered it
-      if (lt >= T.RHY && lt < WIPE1) drawRhythm(ctx, lt);
-      // IV  TIMING — from the wipe until the iris floods the frame
-      if (lt >= WIPE0 && irisR(lt) < 1140) actTiming(ctx, lt);
-      // V   & — until the ink wave swallows it
-      if (lt >= T.AMP && lt < WAVE1) actAmp(ctx, lt);
-      // VI  FLOW → counter dive → ink
-      if (lt >= WAVE0) actFlow(ctx, lt);
+      SD = api.detail === 1 ? api.subDt || 0 : 0; // box-filter interval (0 inside s6 panels)
+      drawScene(ctx, lt, api);
 
       if (api.detail === 1) {
         // a breath of bloom on the detonation; a 2-frame digital stutter as RHYTHM cuts in
