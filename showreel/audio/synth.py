@@ -17,14 +17,16 @@
 #  audio/analyze.py measures the result against the timeline (onset error must be < 2 ms).
 #
 #  SIGNAL FLOW
-#    instruments ─► buses  kick · sub · bass (mono)  |  drums · hits · music · pad · fx (stereo)
+#    instruments ─► buses  kick · boom · sub · bass (mono)  |  drums · hits · music · pad · fx (stereo)
 #                 └► sends room · hall (synthetic-IR convolution) · dly (ping-pong ⅜-beat)
-#    bus stage     4th-order HPF on everything that is not kick/sub/bass (clean low end),
-#                  kick-keyed sidechain pump (per-bus depth/release), arrangement automation
-#                  ("sucks" into hits, the tension gap before the final hit)
-#    master        glue compressor → 4× oversampled soft clipper → true-peak look-ahead limiter
-#                  (−1.3 dBTP) → loudness-normalised to −14 LUFS (BS.1770-4 gated) → fade →
-#                  TPDF dither → 16-bit PCM
+#    bus stage     4th-order HPF (110–180 Hz) on everything that is not kick/boom/sub/bass, a
+#                  DC blocker on those; kick-keyed sidechain pump (per-bus depth/release) on the
+#                  sustained parts only — a hit's own sub layer lives on 'boom' and is never
+#                  ducked by it; arrangement automation ("sucks" into hits, the tension gap);
+#                  bus faders
+#    master        air shelf → glue compressor → 4× oversampled soft clipper → true-peak
+#                  look-ahead limiter (−1.3 dBTP) → loudness-normalised to −14 LUFS (BS.1770-4,
+#                  gated) → end fade → TPDF dither → 16-bit PCM
 #
 #  KEY F minor. Harmony per beat (b = beat index):
 #    0–3  F pedal (ignition)          4–9   Fm Fm Db Eb Ab Bbm (word slams, top line C C Eb G F)
@@ -361,16 +363,21 @@ def reverse_swell(dur, key, f=2800.0, bright=1.0, ir=None):
     burst = filt(noise(n0, 'rsw', key), 'bp', f, 0.7) * np.exp(-t / 0.008)
     burst += bright * 0.4 * filt(noise(n0, 'rsw2', key), 'hp', 6000) * np.exp(-t / 0.004)
     wet = np.stack([sps.oaconvolve(burst, ir[c])[:nsamp(dur)] for c in range(2)])
-    wet = wet[:, ::-1]
+    wet = norm(wet[:, ::-1])
+    u = np.linspace(0.0, 1.0, wet.shape[1])
+    # a hall only decays ~9 dB in its first half-second, so shape it into a proper inhale:
+    # +30 dB of swell and a low-pass that opens as it arrives
+    wet = tvfilt(wet * undb(-30 * (1 - u) ** 1.6), 'lp', 700 * (16000 / 700) ** u, 0.8)
     return fade(norm(wet), smp(0.02), smp(0.0025))
 
 
 # ═════════════════════════════════════════ MIXER ════════════════════════════════════════════
 # bus: (high-pass Hz or None, sidechain depth, sidechain hold s, sidechain release s, fader dB)
 BUSES = {
-    'kick':  (None, 0.00, 0.000, 0.00, -6.5),
-    'sub':   (None, 1.00, 0.030, 0.20, -4.5),
-    'bass':  (28.0, 0.92, 0.012, 0.13, -1.0),
+    'kick':  (None, 0.00, 0.000, 0.00, -7.0),
+    'boom':  (None, 0.00, 0.000, 0.00, -6.0),     # the sub layer OF a hit — never ducked by it
+    'sub':   (None, 1.00, 0.030, 0.20, -4.0),
+    'bass':  (28.0, 0.92, 0.012, 0.13, -2.5),
     'drums': (110.0, 0.00, 0.000, 0.00, 1.5),
     'hits':  (110.0, 0.00, 0.000, 0.00, 1.0),
     'music': (120.0, 0.35, 0.010, 0.12, 2.0),
@@ -477,9 +484,9 @@ class Mix:
         out = np.zeros((2, N))
         self.levels = {}
         for k, (hp, depth, _, _, fader) in BUSES.items():
-            x = self.bus[k]
-            if hp:
-                x = butter(x, 'hp', hp, 4)
+            # HPF per bus, BEFORE the automation: kick/boom/sub just get a 22 Hz DC blocker. (A
+            # master-bus HPF would ring on into the tension gap after everything is cut.)
+            x = butter(self.bus[k], 'hp', hp, 4) if hp else butter(self.bus[k], 'hp', 22.0, 2)
             x = x * (self.auto[k] * self.sidechain(k) * undb(fader))
             kw = -0.691 + 10 * np.log10(np.mean(np.sum(kweight(x) ** 2, axis=0)) + 1e-20)
             self.levels[k] = (lin2db(np.max(np.abs(x))), kw)
@@ -491,8 +498,9 @@ class Mix:
 # Each returns a mono (n,) or stereo (2, n) array starting AT its transient, peak ≈ 1.
 KICKS = {
     #          dur   f_hi  f_lo(F1)   pitch τ chirp hold  decay drive click
-    'groove': (0.42, 175., hz(29), 0.030, 520., 0.05, 0.17, 1.8, 0.30),
-    'drop':   (1.25, 250., hz(29) * .97, 0.055, 760., 0.10, 0.42, 2.4, 0.42),
+    'groove': (0.36, 175., hz(29), 0.028, 520., 0.035, 0.12, 1.9, 0.32),
+    'drop':   (1.25, 250., hz(29), 0.055, 760., 0.10, 0.42, 2.4, 0.42),     # kick + sub boom in one
+    'final':  (2.00, 280., hz(29), 0.060, 820., 0.13, 0.62, 2.6, 0.46),
     'soft':   (0.36, 150., hz(29), 0.028, 280., 0.04, 0.13, 1.4, 0.16),
 }
 
@@ -601,7 +609,7 @@ def supersaw(notes, n, voices=5, detune=14.0, spread=0.85, key=(), bend=None):
     return out / np.sqrt(len(notes) * voices)
 
 
-def stab(notes, dur=0.40, key=0, bright=1.0, voices=5, detune=16.0, scoop=35.0, sustain=0.45,
+def stab(notes, dur=0.40, key=0, bright=1.0, voices=5, detune=16.0, scoop=35.0, sustain=0.34,
          rel=0.18, q=1.0, tick=0.22):
     """Synth-brass chord stab: supersaw with a brass 'scoop' (starts flat, snaps to pitch), a
     filter that opens hard on the transient then falls, and a noise tick for definition."""
@@ -626,35 +634,37 @@ def pad(notes, dur, key, cutoff, voices=7, detune=22.0, q=0.7, attack=0.4, relea
     return fade(x * env, 0, 480)
 
 
-def pluck(f, dur=0.45, decay=0.24, key=0, det=6.0, hf=0.55):
+def pluck(f, dur=0.45, decay=0.24, key=0, det=0.8, hf=0.55):
     """Additive pluck: harmonic k decays (1 + hf·(k−1))× faster — a string / filtered-saw pluck
-    that is alias-free by construction. Two voices ±det cents, spread L/R."""
+    that is alias-free by construction. Two voices ±det cents, spread L/R, the right one shifted
+    a quarter period so the twins never start phase-locked (no beating notch in mono)."""
     n = nsamp(dur)
     t = taxis(n)
     out = np.zeros((2, n))
     for side in (-1, 1):
         fv = f * 2 ** (side * det / 1200)
+        off = 0.0 if side < 0 else np.pi / 2
+        h = hf * (1.0 + 0.2 * side)                                    # the twins differ in timbre
         K = max(1, min(40, int(11000 / fv)))
         x = np.zeros(n)
         for k in range(1, K + 1):
-            x += (k ** -1.0) * np.sin(TAU * k * fv * t) * np.exp(-t * (1 + hf * (k - 1)) / decay)
+            x += (k ** -1.0) * np.sin(TAU * k * fv * t + k * off) * np.exp(-t * (1 + h * (k - 1)) / decay)
         out += pan2(x, 0.45 * side)
     out += pan2(filt(noise(n, 'pick', key), 'bp', 4200, 0.8) * np.exp(-t / 0.0012) * 0.25, 0)
     return fade(norm(out * smoothstep(0, 0.0006, t)), 2, 480)
 
 
-def bell(f, dur=1.8, key=0, bright=1.0, det=4.0):
-    """FM bell (DX-style 1:3.5) with two inharmonic partials; a detuned twin for width."""
+def bell(f, dur=1.8, key=0, bright=1.0, width=0.5):
+    """FM bell (DX-style 1:3.5) with two inharmonic partials. Width comes from mixing the
+    partials differently per side — never from a detuned twin, which would beat and cancel
+    in mono (a cheap tremolo)."""
     n = nsamp(dur)
     t = taxis(n)
-    out = np.zeros((2, n))
-    for side in (-1, 1):
-        fv = f * 2 ** (side * det / 1200)
-        I = bright * (2.6 * np.exp(-t / 0.18) + 0.35)
-        x = np.sin(TAU * fv * t + I * np.sin(TAU * 3.5 * fv * t)) * np.exp(-t / 0.75)
-        x += 0.32 * np.sin(TAU * 2.756 * fv * t) * np.exp(-t / 0.42)
-        x += 0.16 * np.sin(TAU * 5.404 * fv * t) * np.exp(-t / 0.14)
-        out += pan2(x, 0.5 * side)
+    I = bright * (2.6 * np.exp(-t / 0.18) + 0.35)
+    core = np.sin(TAU * f * t + I * np.sin(TAU * 3.5 * f * t)) * np.exp(-t / 0.75)
+    p2 = 0.32 * np.sin(TAU * 2.756 * f * t) * np.exp(-t / 0.42)
+    p3 = 0.16 * np.sin(TAU * 5.404 * f * t) * np.exp(-t / 0.14)
+    out = np.stack([core + p2 * (1 + width) + p3 * (1 - width), core + p2 * (1 - width) + p3 * (1 + width)])
     return fade(norm(out * smoothstep(0, 0.0007, t)), 2, 2400)
 
 
@@ -1011,10 +1021,14 @@ SLAMS = [  # beat, chord (bass root first), whoosh (dur, f0, f1, q, shape, pan, 
 ]
 
 
-def impact(mix, kit, t, root, big=1.0, key=0, chord_notes=None, crash_db=-9.0, boom_dur=1.5):
-    """Layered hit: kick + sub boom + crash (+ optional chord stab); ducks the bed."""
-    mix.add('kick', kit.kick['drop'], t, 2.0 + 3.0 * (big - 1))
-    mix.add('sub', boom(hz(sub_note(root)), boom_dur, 0.5 * big + 0.1), t, -3.0 + 2.0 * (big - 1))
+def impact(mix, kit, t, root, big=1.0, key=0, chord_notes=None, crash_db=-9.0, boom_dur=1.5, kick='drop'):
+    """Layered hit: kick + sub boom + crash (+ optional chord stab); ducks the bed.
+    On F-rooted hits the long, saturated 'drop'/'final' kick IS the boom (a second F1 sine on top
+    would only phase-beat against it). Off-root hits pair the short groove kick with a boom tuned
+    to the chord, whose soft 20 ms attack lets the kick's transient lead."""
+    mix.add('kick', kit.kick[kick], t, 2.0 + 3.0 * (big - 1))
+    if kick == 'groove':
+        mix.add('boom', boom(hz(sub_note(root)), boom_dur, 0.5 * big + 0.1, attack=0.02), t, -4.0)
     mix.add('hits', crash(1.4 + 0.6 * big, 0.45 + 0.25 * big, key), t, crash_db, room=0.1, hall=0.25)
     thump = filt(noise(nsamp(0.12), 'thump', key), 'lp', 700, 0.8) * np.exp(-taxis(nsamp(0.12)) / 0.018)
     mix.add('hits', fade(norm(thump), 3, 240), t, -10, room=0.3)
@@ -1076,8 +1090,7 @@ def kinetic(mix, kit):
 def shape(mix, kit):
     T0 = b(10)
     # Portal arrival: kick + boom + a bright bloom, then the swoosh-through falls away.
-    mix.add('kick', kit.kick['drop'], T0, -1.0)
-    mix.add('sub', boom(hz(nm('F1')), 0.9, 0.3, 1.8), T0, -5)
+    mix.add('kick', kit.kick['drop'], T0, 1.0)
     mix.duck(T0, 1.0, 1.6)
     n = nsamp(0.5)
     t = taxis(n)
@@ -1121,10 +1134,10 @@ PAD_BBM9 = chord('Bb2', 'F3', 'Ab3', 'Db4', 'C5')
 
 def depth(mix, kit):
     T0 = b(16)
-    impact(mix, kit, T0, nm('Db2'), 0.6, 'burst', None, -9, 1.0)
+    impact(mix, kit, T0, nm('Db2'), 0.8, 'burst', None, -9, 1.0, kick='groove')
     # Stereo shimmer: a fast 'strum' of high bells fanned across the field.
     for i, m in enumerate(('F6', 'Ab6', 'C7', 'Eb7', 'F7', 'Ab7', 'C8')):
-        mix.add('music', bell(hz(nm(m)), 1.3, ('shim', i), 0.7, 7), T0 + 0.004 + 0.011 * i, -19 - 0.4 * i,
+        mix.add('music', bell(hz(nm(m)), 1.3, ('shim', i), 0.7), T0 + 0.004 + 0.011 * i, -19 - 0.4 * i,
                 pan=(-0.9 + 0.3 * i) * (1 if i % 2 else -1), hall=0.45)
 
     # Pad swell: Dbmaj9 → Bbm9, filter opening across the bar, closing into the collapse.
@@ -1137,10 +1150,9 @@ def depth(mix, kit):
 
     # Morph whooms (sub drops) on torus / terrain / helix, each with a short swell into it.
     for n_, m in ((17, 'Db2'), (18, 'Bb1'), (19, 'F1')):
-        mix.add('sub', whoom(hz(nm(m)), 170, 0.6, key=n_), b(n_), -6)
+        mix.add('boom', whoom(hz(nm(m)), 170, 0.6, key=n_), b(n_), -7)
         mix.add_end('fx', whoosh(0.14, 150, 900, 0.8, 2.0, (0, 0), ('pre', n_), 1.0), b(n_), -19)
         mix.add('hits', pop(1400, 260, 0.1, 0.006, 0.03, ('mm', n_), 0.7), b(n_), -13, room=0.2)
-        mix.add('kick', kit.kick['soft'], b(n_), -3)
         mix.suck(b(n_), 0.015, 0.2, buses=('fx',), back=0.006)
         mix.duck(b(n_), 0.7, 1.2)
 
@@ -1183,7 +1195,7 @@ def liquid(mix, kit):
     mix.add('hits', plip(), T0, -5, room=0.3, hall=0.25)
     mix.add('hits', splash(0.9, 'liq'), T0, -11, room=0.2, hall=0.2)
     mix.add('kick', kit.kick['soft'], T0, -1)
-    mix.add('sub', boom(hz(nm('F1')), 0.6, 0.22, 1.6), T0, -6)
+    mix.add('boom', boom(hz(nm('F1')), 0.7, 0.25, 1.6, attack=0.05), T0, -5)
     mix.duck(T0, 1.0, 1.3)
     four_floor(mix, kit, (21, 22, 23))
     claps(mix, kit, (21, 23), -8, room=0.45, hall=0.12)
@@ -1266,7 +1278,9 @@ def stutter(notes, key):
         idx = np.arange(L) * 2 ** (0.9 * k / 12)
         sl = np.stack([np.interp(idx, np.arange(L), sl[c]) for c in range(2)])
         out[:, k * L:(k + 1) * L] += fade(sl, 2, 72) * (0.75 - 0.1 * k)
-    out = 0.55 * out + 0.6 * crush(norm(out), 5, 5)
+    grit = filt(crush(norm(out), 5, 5), 'lp', 8500, 0.7)
+    grit *= np.exp(-taxis(out.shape[1]) / 0.12)                   # the crush is a transient, not a bed
+    out = 0.6 * out + 0.45 * grit
     return fade(norm(out), 3, 480)
 
 
@@ -1288,7 +1302,7 @@ def multiverse(mix, kit):
         u = (tt - T0) / (T_GAP - T0)
         sn = snare(('roll', i), 185 + 110 * u, 0.09 + 0.05 * (1 - u), 0.8 + 0.5 * u)
         sn = filt(sn, 'lp', 2500 + 11000 * u ** 1.5, 0.7)
-        mix.add('drums', fade(sn, 2, 240), tt, -20 + 14 * u ** 1.3, pan=0.15 * (-1) ** i, room=0.25)
+        mix.add('drums', fade(sn, 2, 240), tt, -16 + 10 * u ** 1.3, pan=0.15 * (-1) ** i, room=0.25)
 
     # Riser into the gap.
     mix.add_end('fx', riser(T_GAP - T0, chord('C4', 'G4', 'C5'), 12, 220, 10000, 'build', (4, 30), 0.5),
@@ -1310,7 +1324,7 @@ def multiverse(mix, kit):
 # ────────────────────────────────────── 13.125 – 15.0  LOCKUP ─────────────────────────────────
 def lockup(mix, kit):
     T0 = b(28)
-    impact(mix, kit, T0, nm('F1'), 1.3, 'final', FM9 + [nm('F2')], -7.5, 2.2)
+    impact(mix, kit, T0, nm('F1'), 1.3, 'final', FM9 + [nm('F2')], -7.5, 2.2, kick='final')
     # Low 'braam' under the hit.
     n = nsamp(1.6)
     t = taxis(n)
@@ -1337,13 +1351,13 @@ def lockup(mix, kit):
 
     # "Motion Designer" swings up: half-time backbeat with a big tail.
     mix.add_end('fx', whoosh(0.12, 800, 3000, 1.2, 2.4, (-0.3, 0.1), 'role', 0.3), b(30), -22)
-    mix.add('drums', kit.clap[1], b(30), -11, room=0.3, hall=0.35)
-    mix.add('drums', snare('ht', 180, 0.16, 0.9), b(30), -15, room=0.3, hall=0.3)
+    mix.add('drums', kit.clap[1], b(30), -9, room=0.3, hall=0.35)
+    mix.add('drums', snare('ht', 180, 0.16, 0.9), b(30), -13, room=0.3, hall=0.3)
 
     # 14.531 STING: the period winks and the signature three-note bell motif (5 → 1 → 9).
     tsg = b(31)
     mix.add('hits', pop(3600, hz(nm('C7')), 0.08, 0.002, 0.015, 'wink', 0.5), tsg, -16)
-    for i, (m, dt, d) in enumerate((('C6', 0.0, -8.5), ('F6', S16, -10.5), ('G6', S8, -9.5))):
+    for i, (m, dt, d) in enumerate((('C6', 0.0, -10.5), ('F6', S16, -12.5), ('G6', S8, -11.5))):
         mix.add('music', bell(hz(nm(m)), 1.6 - 0.2 * i, ('sting', i), 1.1 - 0.1 * i), tsg + dt, d,
                 pan=(-0.2, 0.2, 0.0)[i], hall=0.4, dly=0.25)
         mix.add('music', pluck(hz(nm(m)) / 2, 0.5, 0.2, ('stingp', i)), tsg + dt, d - 9, room=0.2)
@@ -1400,7 +1414,7 @@ def true_peak(x, os=4):
     return np.max(np.abs(sps.resample_poly(x, os, 1, axis=-1)))
 
 
-def glue(x, thr=-17.0, ratio=2.0, knee=6.0, att=0.015, rel=0.16, hop=32):
+def glue(x, thr=-22.0, ratio=1.6, knee=8.0, att=0.025, rel=0.20, hop=32):
     """Stereo-linked RMS bus compressor (detector high-passed at 120 Hz so the sub doesn't pump
     the whole mix), gain smoothed at control rate."""
     det = butter(x, 'hp', 120, 2)
@@ -1463,7 +1477,7 @@ def limiter(x, ceil_db=TP_CEIL_DB, look=0.0015, rel=0.07, os=4, hop=16):
 
 
 def master(pre):
-    pre = butter(pre, 'hp', 22, 2)                                   # DC / infrasonic
+    pre = filt(pre, 'hs', 11000, 0.7, 1.5)                           # a little air on top
     pre = pre * undb(-20.0 - lufs(pre))                              # reference level for the glue
     glued, ggr = glue(pre)
     fade_end = np.ones(N)
