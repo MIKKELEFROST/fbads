@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import os from 'node:os';
 
 const require = createRequire(import.meta.url);
@@ -162,8 +162,7 @@ async function main() {
         const a = performance.now();
         const c = R.frame(t, { samples: 1 });
         // Force the deferred Canvas/WebGL work to finish so the timing is the real raster cost.
-        const gl = c.getContext('webgl2');
-        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+        c.getContext('2d').getImageData(0, 0, 1, 1);
         per.push([t, performance.now() - a]);
       }
       return per;
@@ -187,7 +186,7 @@ async function main() {
     const CH = num('chunk', 20);
     const chunks = [];
     for (let i = 0; i < frames.length; i += CH) chunks.push(frames.slice(i, i + CH));
-    const files = chunks.map((_, i) => path.join(tmp, `chunk_${String(i).padStart(4, '0')}.mkv`));
+    const files = chunks.map((_, i) => path.join(tmp, `chunk_${String(i).padStart(4, '0')}.nut`)); // nut keeps an exact 1/60 timebase
     let next = 0, done = 0;
     const jobs = Array.from({ length: workers }, async () => {
       const { browser, page, consoleErrors } = await openPage(port);
@@ -215,9 +214,19 @@ async function main() {
     const args = ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list];
     if (A.audio) args.push('-i', A.audio);
     args.push('-map', '0:v');
-    if (A.audio) args.push('-map', '1:a', '-c:a', 'aac', '-b:a', '320k', '-shortest');
-    args.push('-c:v', 'libx264', '-preset', A.preset || 'slow', '-crf', String(num('crf', 16)), '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-tune', 'animation', '-r', String(FPS), '-movflags', '+faststart', out);
+    if (A.audio) args.push('-map', '1:a', '-c:a', 'aac', '-b:a', '320k');
+    // Re-stamp every decoded frame from its index so ffmpeg can never duplicate or drop one.
+    args.push('-vf', `setpts=N/(${FPS}*TB)`, '-fps_mode', 'cfr', '-r', String(FPS), '-video_track_timescale', String(FPS * 256));
+    args.push('-t', String(frames.length / FPS));
+    args.push('-c:v', 'libx264', '-preset', A.preset || 'slow', '-crf', String(num('crf', 16)), '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-tune', 'animation', '-movflags', '+faststart', out);
     execFileSync(FFMPEG, args, { stdio: 'inherit' });
+    // Verify: the encoded stream must hold exactly one frame per rendered frame.
+    const probe = spawnSync(FFMPEG, ['-hide_banner', '-i', out, '-map', '0:v', '-f', 'null', '-'], { encoding: 'utf8' });
+    const counted = +([...String(probe.stderr).matchAll(/frame=\s*(\d+)/g)].pop() || [])[1];
+    if (counted !== frames.length) {
+      console.error(`frame count mismatch: encoded ${counted}, rendered ${frames.length}`);
+      errCount++;
+    } else console.log(`verified ${counted} frames`);
     if (!A.keep) fs.rmSync(tmp, { recursive: true, force: true });
     console.log(`video → ${out} (${frames.length} frames, ${workers} workers, ${samples}x blur, ${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   } else {

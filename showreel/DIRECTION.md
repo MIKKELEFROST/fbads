@@ -30,8 +30,12 @@ beat times** (use `R.beat(n)` / the `R.HITS` list in `lib/timeline.js`). Put **a
 
 ## 2. Handoff contracts (non-negotiable)
 
-The last frame of scene N and the first frame of scene N+1 must match exactly, so the cut is invisible.
-"Last frame" = t = end − 1/60 s; it's fine to arrive at the contract state 2–4 frames early and hold.
+The last frame of scene N and the contract state must match exactly, so the cut is invisible.
+Scene N should arrive at its contract state **no more than 1–2 frames early** (long frozen holds kill
+the momentum). **Every boundary sits on a hit, so scene N+1's first rendered frame must already show
+the impact** (burst, pop, crack, splash starting). The contract describes the instant of the cut, not
+a frame to hold. Several boundaries fall between frames (4.6875 = f281.25, 9.375 = f562.5): the first
+rendered frame is then f282 / f563.
 
 | boundary | state at the cut |
 |---|---|
@@ -58,8 +62,13 @@ The last frame of scene N and the first frame of scene N+1 must match exactly, s
 - **Readability**: after a word/element lands, give it ≥150 ms of readable rest before it leaves.
 - **Composition**: 96 px margins. The HUD lives in the four corners (small mono text ~40–70 px from the
   edges) — keep hero content out of those corner zones.
-- **Motion blur** is applied globally in the final render (4 sub-frames, 180° shutter), so fast moves
-  blur naturally. Don't fake blur unless it's a stylistic choice.
+- **Motion blur** is applied globally in the final render (4 sub-frames, 180° shutter). Four point
+  samples strobe into hard copies on very fast movers, so a scene should either raise the sample count
+  locally with `samplesAt(lt) → n` in its `R.scene({...})` definition (e.g. 16 during a whip), or
+  box-filter the mover itself across `api.subDt`, as s1 and s7 do. Always review fast moves on
+  `--samples 4` stills.
+- **Post**: grain 0.03, vignette 0.22 (set `api.post.vignette = 0.05` on flat colour fields so they stay
+  flat), optional `api.post.bloom` (a smooth blurred glow). The HUD is drawn after the post pass.
 - **Camera shake + chromatic aberration** fire automatically on `R.HITS`. Set `shake: 0.5` (etc.) in
   your `R.scene({...})` to scale it for your scene.
 

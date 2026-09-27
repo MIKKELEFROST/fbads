@@ -327,6 +327,7 @@ void main(){ vUv = aPos*.5+.5; gl_Position = vec4(aPos,0.,1.); }`;
   // ───────────────────────── post-process ─────────────────────────
   const POST = `
 uniform sampler2D uTex;
+uniform sampler2D uBloomTex; // quarter-res, pre-blurred copy of the frame (see bloomLayer)
 uniform float uCA, uGrain, uVig, uGlitch, uFlash, uSeed, uBloom;
 vec3 tap(vec2 uv){ return texture(uTex, clamp(uv, vec2(0.), vec2(1.))).rgb; }
 void main(){
@@ -346,19 +347,12 @@ void main(){
   col.g = tap(uv).g;
   col.b = tap(uv - d * ca * 1.0).b;
   if (uBloom > .001) {
-    vec3 b = vec3(0.);
-    float tot = 0.;
-    for (int i = 0; i < 12; i++) {
-      float a = float(i) * 2.39996;
-      float rr = sqrt(float(i) + .5) / sqrt(12.) * .028;
-      vec2 o = vec2(cos(a), sin(a)) * rr * vec2(uRes.y / uRes.x, 1.);
-      vec3 s = tap(uv + o);
-      b += max(s - .55, 0.);
-      tot += 1.;
-    }
-    col += b / tot * uBloom * 2.2;
+    // Smooth glow from the blurred quarter-res copy (no discrete tap ghosts), soft-thresholded.
+    vec3 b = texture(uBloomTex, uv).rgb;
+    float l = dot(b, vec3(.2126, .7152, .0722));
+    col += b * smoothstep(.3, .9, l) * uBloom * 1.6;
   }
-  float v = smoothstep(1.05, .25, length(d * vec2(1., .85)) * 1.25);
+  float v = smoothstep(1.25, .45, length(d * vec2(1., .85)) * 1.25);
   col *= mix(1., v, uVig);
   float g = hash21(vUv * uRes + fract(uSeed * 13.17) * 1000.) - .5;
   col += g * uGrain * (1. - .5 * dot(col, vec3(.333)));
@@ -366,15 +360,22 @@ void main(){
   fragColor = vec4(col, 1.);
 }`;
   let outTarget = null;
+  const bloomCanvas = mk(W / 4, H / 4), bloomCtx = bloomCanvas.getContext('2d');
+  const finalCanvas = mk(), finalCtx = finalCanvas.getContext('2d');
+  R._canvases.finalCanvas = finalCanvas;
 
   // ───────────────────────── frame ─────────────────────────
   // Render the final frame at global time t. Returns the output canvas.
   // opts.samples: motion-blur subframes (1 = off). opts.shutter: fraction of frame interval (0.5 = 180°).
+  // A scene may define samplesAt(lt) → sub-sample count to raise motion-blur quality locally (fast type moves);
+  // it only applies when the render already uses motion blur (opts.samples > 1).
   R.frame = (t, opts = {}) => {
-    const S = Math.max(1, opts.samples | 0 || 1);
+    let S = Math.max(1, opts.samples | 0 || 1);
+    const cur = activeScene(t);
+    if (S > 1 && cur && cur.samplesAt) S = Math.max(S, Math.min(32, cur.samplesAt(t - cur.start) | 0));
     const shutter = opts.shutter ?? 0.5;
     const dt = shutter / R.FPS;
-    postState = { ca: 0, glitch: 0, flash: 0, grain: 0.03, vignette: 0.55, bloom: 0, hud: 1 };
+    postState = { ca: 0, glitch: 0, flash: 0, grain: 0.03, vignette: 0.22, bloom: 0, hud: 1 };
     frameInfo = { t, samples: S, subDt: S > 1 ? dt / S : 0 };
     for (let i = 0; i < S; i++) {
       const ts = t + (i / S) * dt;
@@ -386,22 +387,17 @@ void main(){
     }
     accumCtx.globalAlpha = 1;
     const base = S > 1 ? accumCanvas : sceneCanvas;
-    resetCtx(compCtx);
-    compCtx.drawImage(base, 0, 0);
-    if (R.hud) {
-      try {
-        compCtx.save();
-        R.hud(compCtx, t, { post: postState, P: R.P, W, H });
-        compCtx.restore();
-      } catch (e) {
-        R.errors.push({ scene: 'hud', t, msg: String(e && e.stack) });
-      }
-      resetCtx(compCtx);
+    if (postState.bloom > 0.001) {
+      resetCtx(bloomCtx);
+      bloomCtx.filter = 'blur(5px)';
+      bloomCtx.drawImage(base, 0, 0, W / 4, H / 4);
+      bloomCtx.filter = 'none';
     }
     const imp = R.impact(t, 7);
     if (!outTarget) outTarget = new GLTarget(W, H);
-    return outTarget.run(POST, {
-      uTex: compCanvas,
+    const post = outTarget.run(POST, {
+      uTex: base,
+      uBloomTex: bloomCanvas,
       uCA: clamp(postState.ca + imp * 0.9, 0, 3),
       uGrain: postState.grain,
       uVig: postState.vignette,
@@ -410,6 +406,21 @@ void main(){
       uBloom: postState.bloom,
       uSeed: t,
     });
+    // The HUD is a monitor overlay: drawn AFTER the post pass, so it never gets grain,
+    // vignette or hit fringing. It probes the post-processed frame it sits on (ctx.canvas).
+    resetCtx(finalCtx);
+    finalCtx.drawImage(post, 0, 0);
+    if (R.hud) {
+      try {
+        finalCtx.save();
+        R.hud(finalCtx, t, { post: postState, P: R.P, W, H });
+        finalCtx.restore();
+      } catch (e) {
+        R.errors.push({ scene: 'hud', t, msg: String(e && e.stack) });
+      }
+      resetCtx(finalCtx);
+    }
+    return finalCanvas;
   };
 
   // ───────────────────────── boot ─────────────────────────
