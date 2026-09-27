@@ -28,7 +28,6 @@
   const W = R.W, H = R.H, CX = W / 2, CY = H / 2;
   const DEG = Math.PI / 180;
   const S16 = BEAT / 4; // 16th note
-  const S32 = BEAT / 8; // 32nd note
 
   // ── beat map (local seconds) ─────────────────────────────────────────────────────────────
   const T = {
