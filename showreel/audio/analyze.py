@@ -183,6 +183,42 @@ def render_png(x, hits, onsets, out):
         dz.text((cx, cy + 4), f'b{n} {k} {n * BEAT:.4f}s  err {(o - c) / SR * 1e3:+.2f}ms', fill=(210, 210, 220))
     z.save(os.path.join(out, 'hits_zoom.png'))
 
+    # per-scene detail: waveform + spectrogram at ~2 ms/px, beat & 16th grid, hits marked
+    for name, a, b_ in SCENES:
+        t0, t1 = a * BEAT, b_ * BEAT
+        s0, s1 = int(t0 * SR), int(t1 * SR)
+        seg = mono[s0:s1]
+        Wd, Hw, Hs = 1400, 150, 380
+        im = Image.new('RGB', (Wd + 70, Hw + Hs + 60), (22, 22, 28))
+        dd = ImageDraw.Draw(im)
+        cols = np.array_split(seg, Wd)
+        for i, c in enumerate(cols):
+            dd.line([(60 + i, 20 + Hw / 2 - c.max() * Hw / 2), (60 + i, 20 + Hw / 2 - c.min() * Hw / 2)], fill=(200, 196, 210))
+        f, tt, Z = sps.stft(seg, SR, nperseg=1024, noverlap=1024 - 96)
+        P = 10 * np.log10(np.abs(Z) ** 2 + 1e-14)
+        P = np.clip((P - (P.max() - 80)) / 80, 0, 1)
+        fy = np.geomspace(40, 20000, Hs)
+        rows = np.array([np.interp(fy, f, P[:, j]) for j in range(P.shape[1])]).T[::-1]
+        xs = np.linspace(0, P.shape[1] - 1, Wd)
+        spec = np.array([np.interp(xs, np.arange(P.shape[1]), r) for r in rows])
+        im.paste(Image.fromarray(_cmap(spec)), (60, 30 + Hw))
+        for fr in (100, 1000, 10000):
+            yy = 30 + Hw + Hs - 1 - np.interp(np.log(fr), np.log(fy), np.arange(Hs))
+            dd.text((20, yy - 6), f'{fr // 1000}k' if fr >= 1000 else str(fr), fill=(200, 200, 200))
+        k0 = int(np.ceil(t0 / (BEAT / 4) - 1e-9))
+        for k in range(k0, int(t1 / (BEAT / 4)) + 1):
+            xx = 60 + (k * BEAT / 4 - t0) / (t1 - t0) * Wd
+            big = k % 4 == 0
+            dd.line([(xx, 14 if big else 18), (xx, 22)], fill=(255, 79, 26) if big else (120, 120, 130))
+            if big:
+                dd.text((xx + 2, 2), f'b{k // 4}', fill=(220, 220, 230))
+        for n, s, kd in hits:
+            if t0 <= n * BEAT < t1:
+                xx = 60 + (n * BEAT - t0) / (t1 - t0) * Wd
+                dd.line([(xx, 20 + Hw), (xx, 30 + Hw)], fill=(212, 255, 58), width=2)
+        dd.text((60, 36 + Hw + Hs), f'{name}  {t0:.3f}–{t1:.3f}s  (grid: 16ths, orange = beats)', fill=(190, 190, 200))
+        im.save(os.path.join(out, f'scene_{name.split()[0]}.png'))
+
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
@@ -217,18 +253,24 @@ def main():
     print(f'  DC: L {np.mean(x[0]) * 1e3:+.3f}e-3  R {np.mean(x[1]) * 1e3:+.3f}e-3')
 
     y = kweight(x) ** 2
-    print('\nper scene:   loudness  peak   corr   corr<120Hz   octave bands 31..16k (dB rel. 1k)')
+    print('\nper scene:   loudness  M.max  peak   corr  <120Hz  >150Hz   octave bands 31..16k (dB rel. 1k)')
+    cs = np.concatenate([[0.0], np.cumsum(y.sum(axis=0))])
+    W4 = int(0.4 * SR)
+    mom = -0.691 + 10 * np.log10((cs[W4:] - cs[:-W4]) / W4 + 1e-20)      # momentary loudness, 400 ms
     lo = sps.sosfilt(sps.butter(4, 120, 'lowpass', fs=SR, output='sos'), x)
+    hi = sps.sosfilt(sps.butter(4, 150, 'highpass', fs=SR, output='sos'), x)
     for name, a, b_ in SCENES:
         s0, s1 = int(a * BEAT * SR), int(b_ * BEAT * SR)
         ls = -0.691 + 10 * np.log10(y[:, s0:s1].mean(axis=1).sum() + 1e-20)
         pk = 20 * np.log10(np.max(np.abs(x[:, s0:s1])) + 1e-12)
         cc = np.corrcoef(x[0, s0:s1], x[1, s0:s1])[0, 1]
         cl = np.corrcoef(lo[0, s0:s1], lo[1, s0:s1])[0, 1]
+        ch_ = np.corrcoef(hi[0, s0:s1], hi[1, s0:s1])[0, 1]
         bl = band_levels(x, s0, s1)
         bl -= bl[5]
-        print(f'  {name:14s} {ls:6.1f}  {pk:5.1f}  {cc:5.2f}  {cl:5.2f}      ' + ' '.join(f'{v:+4.0f}' for v in bl))
-    for tag, a, b_ in (('gap 12.925–13.125', 12.93, 13.12), ('last 0.05 s', 14.95, 15.0), ('first 0.05 s', 0, 0.05)):
+        mm = mom[s0:max(s0 + 1, s1 - W4)].max()
+        print(f'  {name:14s} {ls:6.1f}  {mm:6.1f}  {pk:5.1f}  {cc:5.2f}  {cl:5.2f}   {ch_:5.2f}    ' + ' '.join(f'{v:+4.0f}' for v in bl))
+    for tag, a, b_ in (('gap 12.94–13.12', 12.94, 13.12), ('last 0.05 s', 14.95, 15.0), ('first 0.05 s', 0, 0.05)):
         s0, s1 = int(a * SR), int(b_ * SR)
         print(f'  {tag:20s} RMS {20 * np.log10(np.sqrt(np.mean(x[:, s0:s1] ** 2)) + 1e-12):7.1f} dBFS')
     print(f'  last sample: L {x[0, -1]:+.6f} R {x[1, -1]:+.6f}')
