@@ -4,38 +4,47 @@
 //  The reel reflects itself. The bone flood s5 leaves behind cracks down the middle and folds
 //  into two cards; on every beat each universe divides again — 2 → 2×2 → 3×3 → 4×4 — and every
 //  panel is a LIVE render of an earlier scene (R.renderScene), with three solid graphic tiles
-//  keeping the rhythm. On the last half-bar the wall implodes back into the dot it came from.
+//  keeping the rhythm. In the soundtrack's tension gap the wall implodes back into the dot.
 //
-//    0.000  CONTRACT   solid P.bone through f675 and its blur sub-frames (overdrawn past the
-//                      frame, so the downbeat's hit-shake never shows an edge)
-//    0.0075 CRACK      an ink gutter bursts open on the downbeat (overshoots to 60 px, settles
-//                      to 16); the halves fold into two 16:9 cards and their bone doors slide
-//                      apart on s2 and s3, running live
+//    0.000  CRACK      the first frame IS the impact: the flood is torn open down the middle —
+//                      a jagged ~120 px tear with a signal-hot core — bursting wider for a frame,
+//                      then straightening and snapping shut to a 16 px gutter as the halves fold
+//                      into two cards. Their bone doors are blown open right behind the crack
+//                      (s2's drop / s3 readable from lt ≈ 0.05), matted by the flood's bone
+//                      to the HUD safe frame until the cards have folded inside it
 //    0.469  2×2        mitosis: each card slides away and an identical copy of its universe
 //                      peels out from underneath (A ↑ C ↓ · D ↑ B ↓ — counter-motion); once
 //                      landed, the copy pushes over to a universe of its own
 //    0.9375 3×3        corners shrink into the corners; four edge panels peel out clockwise
 //                      (a pinwheel) and the centre tile punches out of the gutter cross, its
 //                      counter rolling 04 → 09
-//    1.406  4×4        the pinwheel turns once more, the centre tile splits in four, 09 → 16
-//    1.60   IMPLOSION  the outer ring rounds off into dots (each in its panel's colour) that
-//                      spiral clockwise into the centre; the dot blooms back at the gutter cross,
-//                      floods the inner four panels, and they fold into its four quadrants —
-//                      the gutter closing to zero
-//    1.812+ CONTRACT   P.ink + bone dot r=28 at (960,540), nothing else; engine shake pinned
+//    1.406  4×4        the pinwheel turns once more (a harder, shorter whip); the newborns switch
+//                      to their own universes while still under their parents; 09 → 16 on the
+//                      beat frame. The full wall is at rest from ≈ 1.53 to 1.68 (≥ 150 ms)
+//    1.68   IMPLOSION  = the soundtrack's tension gap (b28 − 0.2 s): the outer ring rounds off
+//                      into dots (each in its panel's colour) that spiral clockwise into the
+//                      centre; the dot blooms back at the gutter cross, floods the inner four,
+//                      and they fold into its four quadrants — the gutter closing to zero
+//    1.848+ CONTRACT   P.ink + bone dot r=28 at (960,540), nothing else (f786–787); shake pinned
 //
 //  Craft notes
+//   · The wall lives inside the HUD safe frame (x 199–1721, y 112–968: the frame itself scaled
+//     to 0.85, so every stage's panels stay ~16:9) — no HUD corner ever prints over a panel.
+//   · Every universe is BEAT-LOCKED (src = [scene, beat offset]): its own slams, wipes and
+//     contacts land on s6's beats, together with the splits and the soundtrack's stutter hits.
 //   · Children are born beneath their parent's rect, wearing the parent's universe, so every
 //     split reads as one image dividing — never a fade or a cut. The channel change that
 //     follows is a push in the direction the child travelled (follow-through).
 //   · Position rides R.ease.snap with its velocity peak (45.6 % of the move) placed exactly on
 //     the beat frame; size rides a snap-attack curve that lands ~6 % past target and settles
 //     (the quick scale overshoot). Stagger is by clockwise angle; children trail parents 12 ms.
-//   · Panels render into per-cell offscreen layers at exact ladder sizes (480/640/960/1280 wide),
-//     so a nested scene's api.detail — and any shader target it sizes from it — only takes 4
-//     values; init() pre-renders every (scene, size) pair so shader compiles land in R.ready.
-//     Universes are cover-fitted and drift with a slow push-in done in the crop. A neighbour
-//     scene that throws mid-save can only corrupt its scratch layer, which is then unwound.
+//   · Panels render into per-universe offscreen canvases at exact ladder sizes (480/640/960/
+//     1280 wide), so a nested scene's api.detail only takes 4 values; init() pre-renders every
+//     (scene, size) pair so shader compiles land in R.ready. A newborn copy shares its parent's
+//     canvas. Motion blur: samplesAt() raises the shutter to 16 samples on the doors, the pushes
+//     and the implosion (8 on the split whips), while panel CONTENT is still rendered at only
+//     4 sub-frame times (cached) — the extra samples cost compositing, not nested renders.
+//   · Source labels print within 4 frames (a short scramble on first appearance only).
 //   · A 1 px bone bezel keeps dark universes from melting into the ink gutters; registration
 //     crosses pop in the gutter intersections after each stage lands.
 //
@@ -57,11 +66,13 @@
   const SIZE = E.bezier(0.7, 0, 0.2, 1.35);   // snap attack, lands ~6 % past target, settles
   const POP = E.bezier(0.55, 0, 0.25, 1.4);   // the centre tile's punch: ~7 % overshoot
   const FOLD = E.bezier(0.45, 0, 0.15, 1.25); // the first fold follows the crack — less wind-up
+  const DOOR = E.bezier(0.2, 0.75, 0.25, 1);  // doors blown open by the crack: fast out, soft stop
 
   // ═════════════════════════════ grid ═════════════════════════════
-  // Grid area inset 64/36 px → exactly 16:9, so every stage's panels are ~16:9 too.
-  const MX = 64, MY = 36;
-  const GW = W - 2 * MX, GH = H - 2 * MY;
+  // The HUD safe frame (96 px margins + the corner clusters): a 16:9 wall, y 112–968.
+  const GH = 856, GW = Math.round((GH * 16) / 9);
+  const MX = (W - GW) / 2, MY = (H - GH) / 2;
+  const SAFE = [96, 112, W - 96, H - 112];    // HUD safe frame [x0, y0, x1, y1]
   const GUT = [0, 16, 16, 14, 12];            // gutter per stage (index = stage 1..4)
   const RAD = [0, 12, 12, 9, 7];              // corner radius per stage
   const NCOL = [0, 2, 2, 3, 4];
@@ -73,48 +84,60 @@
   }
 
   // Transitions into stage k: snap's velocity peak sits on beat b.
-  const TR = [null, null, { b: B1, d: 0.3 }, { b: B2, d: 0.28 }, { b: B3, d: 0.24 }];
+  const TR = [null, null, { b: B1, d: 0.3 }, { b: B2, d: 0.28 }, { b: B3, d: 0.18 }];
   const trStart = (k) => TR[k].b - PEAK * TR[k].d;
-  const SPREAD = [0, 0, 0.03, 0.045, 0.035];  // clockwise stagger across a transition
+  const SPREAD = [0, 0, 0.03, 0.045, 0.015];  // clockwise stagger across a transition
   const CHILD = 0.012;                        // a child trails its parent
   const POP_D = 0.26;                         // the centre tile punches out as the corners clear
   // Channel change (push to the child's own universe): starts at this fraction of the split
-  // move and lasts SWAP_D. Stage 1 uses SWAP_D[1] for its bone doors.
-  const SWAP_AT = [0, 0, 0.62, 0.6, 0.35];
-  const SWAP_D = [0, 0.2, 0.2, 0.18, 0.15];
+  // move and lasts SWAP_D. Stage 4 swaps almost at once — the newborns are still under their
+  // parents, so the small, fast 4×4 split never shows a pile of duplicates.
+  const SWAP_AT = [0, 0, 0.62, 0.6, 0.05];
+  const SWAP_D = [0, 0.22, 0.2, 0.18, 0.12];  // [1] = the stage-1 bone doors
 
-  // Implosion
-  const OUT0 = 1.595, OUT_SPREAD = 0.03, OUT_D = 0.16; // outer ring → dots → spiral in (all home by 1.785)
-  const BLOOM0 = 1.6, BLOOM_D = 0.14;                 // the dot blooms back at the gutter cross
-  const IN0 = 1.622, IN1 = 1.805;                     // inner four → quadrants of the disc
-  const INFOLD = E.bezier(0.5, 0, 0.1, 1);            // the fold: short wind-up, hard landing
+  // Opening (the crack)
+  const DOOR0 = 0.02, DOOR_LAG = 0.015;       // doors open right behind the crack, B a hair later
+  const JAG_END = 0.14;                       // the torn edges have straightened by here
+  const GAP = [[0, 120], [0.025, 136, 'expoOut'], [0.27, 16, E.snap]]; // gutter burst → settle
+
+  // Implosion — inside the soundtrack's tension gap (b28 − 0.2 s = lt 1.675)
+  const OUT0 = 1.68, OUT_SPREAD = 0.016, OUT_D = 0.152; // outer ring → dots → spiral in (home by 1.848)
+  const BLOOM0 = 1.683, BLOOM_D = 0.09;                 // the dot blooms back at the gutter cross
+  const IN0 = 1.692, IN1 = 1.815;                       // inner four → quadrants of the disc
+  const INFOLD = E.bezier(0.5, 0, 0.1, 1);              // the fold: short wind-up, hard landing
   const DOT_R = 28;
-  const T_OPEN = 0.0075;  // the flood holds solid through f675 and all its blur sub-frames (lt ≤ .00625)
-  const T_CLEAN = 1.812;                              // from here: ink + dot only (contract)
-  const SWIRL = 1.25;                                 // radians of clockwise spiral on the way in
+  const T_CLEAN = 1.848;                                // from here: ink + dot only (f786–787)
+  const SWIRL = 1.25;                                   // radians of clockwise spiral on the way in
+
+  // Source labels
+  const CHIP_IN = 0.05, CHIP_DEC = 4 / 60;              // pill wipe · scramble → resolved in 4 frames
 
   // ═════════════════════════════ cast ═════════════════════════════
   // at: grid slot per stage. from: parent id (born beneath its rect) or 'pop' (out of the gutter
-  // cross). src: [scene, hero time] — the panel shows exactly the hero moment as its channel
-  // change begins, then runs in real time (wrapping inside that scene's window).
+  // cross). src: [scene, beat offset] — the universe runs in real time, BEAT-LOCKED: on s6 beat n
+  // it shows its source's beat n + offset (wrapping inside that scene's window), so every slam,
+  // wipe and contact in every panel lands on the same beats as the splits and the stutter hits.
+  // Offsets are chosen for the hero moment at each channel change and for the wall at rest
+  // (in brackets); panels on the same source use distinct offsets, so no two ever match.
+  // zoom/focus: extra crop into the source (s1's dot is tiny at panel size).
   // tone: the colour the panel becomes as a dot in the implosion.
   const DEF = [
-    { id: 'A', born: 1, at: { 1: [0, 0], 2: [0, 0], 3: [0, 0], 4: [0, 0] }, src: ['s2', 2.02], tone: P.ultra },
-    { id: 'B', born: 1, at: { 1: [1, 0], 2: [1, 1], 3: [2, 2], 4: [3, 3] }, src: ['s3', 5.3], tone: P.bone },
-    { id: 'C', born: 2, from: 'A', at: { 2: [0, 1], 3: [0, 2], 4: [0, 3] }, src: ['s5', 9.95], tone: P.signal },
-    { id: 'D', born: 2, from: 'B', at: { 2: [1, 0], 3: [2, 0], 4: [3, 0] }, src: ['s2', 3.45], tone: P.bone },
-    { id: 'E', born: 3, from: 'A', at: { 3: [1, 0], 4: [1, 0] }, src: ['s4', 7.75], tone: P.bone },
-    { id: 'F', born: 3, from: 'D', at: { 3: [2, 1], 4: [3, 1] }, src: ['s1', 0.4], tone: P.bone },
-    { id: 'G', born: 3, from: 'B', at: { 3: [1, 2], 4: [2, 3] }, src: ['s2', 3.2], tone: P.ultra },
-    { id: 'H', born: 3, from: 'C', at: { 3: [0, 1], 4: [0, 2] }, src: ['s3', 5.75], tone: P.ultra },
+    { id: 'A', born: 1, at: { 1: [0, 0], 2: [0, 0], 3: [0, 0], 4: [0, 0] }, src: ['s2', -20], tone: P.ultra },   // drop → MOTION · is on b25 · [TIMING]
+    { id: 'B', born: 1, at: { 1: [1, 0], 2: [1, 1], 3: [2, 2], 4: [3, 3] }, src: ['s3', -13], tone: P.bone },    // squircle + spring graph · [bone disc]
+    { id: 'C', born: 2, from: 'A', at: { 2: [0, 1], 3: [0, 2], 4: [0, 3] }, src: ['s5', -4], tone: P.signal },   // fluid splash · [the flood blob]
+    { id: 'D', born: 2, from: 'B', at: { 2: [1, 0], 3: [2, 0], 4: [3, 0] }, src: ['s2', -18], tone: P.bone },    // TIMING drop · & · [FLOW]
+    { id: 'E', born: 3, from: 'A', at: { 3: [1, 0], 4: [1, 0] }, src: ['s4', -10], tone: P.bone, zoom: 1.25 },   // the s4 burst · [torus]
+    { id: 'F', born: 3, from: 'D', at: { 3: [2, 1], 4: [3, 1] }, src: ['s1', -25], tone: P.bone, zoom: 1.9, focus: [960, 610] }, // bounce, contact on b27 · [thesis line]
+    { id: 'G', born: 3, from: 'B', at: { 3: [1, 2], 4: [2, 3] }, src: ['s2', -23], tone: P.signal },  // FLOW rising · [MOTION]
+    { id: 'H', born: 3, from: 'C', at: { 3: [0, 1], 4: [0, 2] }, src: ['s3', -14], tone: P.ultra },   // triangle · [star]
     { id: 'I', born: 3, from: 'pop', at: { 3: [1, 1], 4: [1, 1] }, tile: 'count', tone: P.signal },
-    { id: 'J', born: 4, from: 'E', at: { 4: [2, 0] }, src: ['s2', 3.92], tone: P.signal },
+    { id: 'J', born: 4, from: 'E', at: { 4: [2, 0] }, src: ['s2', -19], tone: P.signal },   // & iris on b27 · [&]
     { id: 'K', born: 4, from: 'F', at: { 4: [3, 2] }, tile: 'bpm', tone: P.ultra },
     { id: 'L', born: 4, from: 'G', at: { 4: [1, 3] }, tile: 'origin', tone: P.bone },
-    { id: 'M', born: 4, from: 'H', at: { 4: [0, 1] }, src: ['s4', 8.6], tone: P.bone },
-    { id: 'N', born: 4, from: 'I', at: { 4: [2, 1] }, src: ['s3', 5.4], tone: P.bone },
-    { id: 'O', born: 4, from: 'I', at: { 4: [2, 2] }, src: ['s2', 2.1], tone: P.signal },
-    { id: 'P', born: 4, from: 'I', at: { 4: [1, 2] }, src: ['s5', 10.5], tone: P.ultra },
+    { id: 'M', born: 4, from: 'H', at: { 4: [0, 1] }, src: ['s4', -8], tone: P.bone },     // terrain rolls up on b27 · [tunnel]
+    { id: 'N', born: 4, from: 'I', at: { 4: [2, 1] }, src: ['s3', -15], tone: P.bone },    // squircle → triangle
+    { id: 'O', born: 4, from: 'I', at: { 4: [2, 2] }, src: ['s2', -22], tone: P.signal },  // the blade slice on b27 · [is]
+    { id: 'P', born: 4, from: 'I', at: { 4: [1, 2] }, src: ['s5', -5], tone: P.ultra },    // fluid
   ];
 
   // ── precompute: rects per stage, start rects, staggered start times, swap timing ──
@@ -147,8 +170,8 @@
     // swap window (stage 1: the bone doors; children: the push to their own universe) and the
     // direction it travels — the direction the panel itself travelled when it was born
     if (c.born === 1) {
-      c.lag1 = c.id === 'A' ? 0 : 0.018;
-      c.sw0 = 0.15 + c.lag1;
+      c.lag1 = c.id === 'A' ? 0 : DOOR_LAG;
+      c.sw0 = DOOR0 + c.lag1;
       c.dir = c.id === 'A' ? 'l' : 'r';
     } else {
       c.sw0 = c.t0[c.born] + SWAP_AT[c.born] * c.dur[c.born];
@@ -156,6 +179,7 @@
       c.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'r' : 'l') : dy > 0 ? 'd' : 'u';
     }
     c.swD = SWAP_D[c.born];
+    c.chip0 = c.sw0 + c.swD * 0.75; // the label prints as the channel change lands
     // z-order: parents above children (children peel out from underneath); the punching
     // centre tile rides above its own generation
     c.z = (5 - c.born) * 10 + (c.from === 'pop' ? 5 : 0);
@@ -181,18 +205,37 @@
   // ═════════════════════════════ geometry ═════════════════════════════
   const PAD = 48; // overdraw of the opening bone flood beyond the frame (> max hit-shake)
 
-  // Stage 0 → 1: the flood cracks open on the downbeat and folds into two cards.
+  // The tear: one jagged profile shared by both halves (so the two edges are complementary),
+  // as [v down the card 0..1, dx −1..1]. Short, irregular segments read as a crack, not a wave.
+  const CRACK = (() => {
+    const rnd = R.rng(2411);
+    const pts = [[0, 0]];
+    for (let v = 0; v < 1; ) {
+      v = Math.min(1, v + 0.028 + rnd() * 0.05);
+      pts.push([v, rnd() * 2 - 1]);
+    }
+    return pts;
+  })();
+  const jagAmp = (lt) => 28 * (1 - E.cubicOut(seg(lt, 0, JAG_END)));
+  const bulge = (lt) => 1 - E.cubicOut(seg(lt, 0, JAG_END)); // the burst is widest at the centre
+  // x of a half's torn inner edge at v (sx = −1: left card A, +1: right card B)
+  const crackX = (lt, gap, v, dx, sx) => CX + sx * (gap / 2) * (1 + 0.4 * bulge(lt) * (Math.sin(Math.PI * v) - 0.5)) + dx * jagAmp(lt);
+
+  // Stage 0 → 1: the flood tears open on the downbeat and folds into two cards.
+  // Returns [cx, cy, w, h, gap]; while the tear is jagged the rect's inner edge reaches the
+  // furthest point of the torn edge (the clip path carves the rest).
   function openRect(c, lt) {
     const s = c.R[1];
     const left = c.id === 'A';
     const t = lt - c.lag1;
-    const gap = R.keys(lt, [[T_OPEN, 0], [0.085, 60, 'expoOut'], [0.36, GUT[1], E.snap]]);
-    const inner = left ? CX - gap / 2 : CX + gap / 2;
-    const uo = POS(seg(t, 0.02, 0.3));
+    const gap = R.keys(lt, GAP);
+    const reach = gap / 2 - (gap / 2) * 0.2 * bulge(lt) - jagAmp(lt); // innermost point of the tear
+    const inner = left ? CX - reach : CX + reach;
+    const uo = POS(seg(t, 0.01, 0.27));
     const outer = left ? lerp(-PAD, s[0] - s[2] / 2, uo) : lerp(W + PAD, s[0] + s[2] / 2, uo);
-    const hh = lerp(H / 2 + PAD, s[3] / 2, FOLD(seg(t, 0.03, 0.35)));
+    const hh = lerp(H / 2 + PAD, s[3] / 2, FOLD(seg(t, 0.015, 0.29)));
     const x0 = left ? outer : inner, x1 = left ? inner : outer;
-    return [(x0 + x1) / 2, CY, Math.max(0, x1 - x0), 2 * hh];
+    return [(x0 + x1) / 2, CY, Math.max(0, x1 - x0), 2 * hh, gap];
   }
 
   const tween = (a, b, up, us) => [lerp(a[0], b[0], up), lerp(a[1], b[1], up), Math.max(0, lerp(a[2], b[2], us)), Math.max(0, lerp(a[3], b[3], us))];
@@ -225,17 +268,18 @@
   }
 
   // Bloom: the bone dot re-emerging at the gutter cross and flooding the inner block.
-  const bloomR = (lt) => (lt >= BLOOM0 ? 560 * E.cubicOut(seg(lt, BLOOM0, BLOOM0 + BLOOM_D)) : 0);
+  const bloomR = (lt) => (lt >= BLOOM0 ? 480 * E.cubicOut(seg(lt, BLOOM0, BLOOM0 + BLOOM_D)) : 0);
 
-  // Full state of a cell at lt: { rect, radii, swap, tone, chipA } or null.
+  // Full state of a cell at lt: { rect, radii, swap, tone, chipA, crack } or null.
   function cellState(c, lt) {
     let rect = gridRect(c, lt);
     if (!rect) return null;
+    const crack = c.born === 1 && lt < JAG_END ? rect[4] : 0;
     const rr = radiusAt(c, lt);
     let radii = [rr, rr, rr, rr];
     let tone = 0;
-    const swap = POS(seg(lt, c.sw0, c.sw0 + c.swD));
-    let chipA = c.live ? E.quadOut(seg(lt, c.sw0 + c.swD * 0.8, c.sw0 + c.swD + 0.1)) : 0;
+    const swap = (c.born === 1 ? DOOR : POS)(seg(lt, c.sw0, c.sw0 + c.swD));
+    let chipA = c.live ? E.quadOut(seg(lt, c.chip0, c.chip0 + CHIP_IN)) : 0;
 
     if (!c.inner) {
       // outer ring: round off into a dot, then spiral into the centre, accelerating
@@ -259,7 +303,7 @@
       // inner four: flooded by the bloom, then folded into the four quadrants of the disc.
       // The far corners round off early, so the block reads as a pill closing into a dot.
       const b = bloomR(lt);
-      if (b > 0) chipA *= 1 - seg(lt, BLOOM0, BLOOM0 + 0.04);
+      if (b > 0) chipA *= 1 - seg(lt, BLOOM0, BLOOM0 + 0.03);
       const k = seg(lt, IN0, IN1);
       if (k > 0) {
         const u = INFOLD(k);
@@ -284,7 +328,7 @@
       const [qx, qy, qw, qh] = rect;
       if (b > 0 && b >= Math.hypot(Math.abs(qx - CX) + qw / 2, Math.abs(qy - CY) + qh / 2)) tone = 1;
     }
-    return { rect, radii, swap, tone, chipA };
+    return { rect, radii, swap, tone, chipA, crack };
   }
 
   // ═════════════════════════════ drawing helpers ═════════════════════════════
@@ -305,12 +349,27 @@
     ctx.closePath();
   }
 
+  // A cell's outline: its rounded rect, or — for the two first cards while the tear is still
+  // jagged — the torn polygon (straight outer edges, the shared crack profile inside).
+  function cellPath(ctx, c, st, lt) {
+    const [cx, cy, w, h] = st.rect;
+    const x = cx - w / 2, y = cy - h / 2;
+    if (!st.crack) return rrPath(ctx, x, y, w, h, st.radii);
+    const sx = c.id === 'A' ? -1 : 1;
+    const outer = sx < 0 ? x : x + w;
+    ctx.moveTo(outer, y);
+    for (const [v, dx] of CRACK) ctx.lineTo(crackX(lt, st.crack, v, dx, sx), y + v * h);
+    ctx.lineTo(outer, y + h);
+    ctx.closePath();
+  }
+
   const SCN = {};
   for (const s of R.SCENES) SCN[s.id] = s;
-  // Hero time + elapsed since the swap began, wrapped inside the source scene's window.
+  const T6 = SCN.s6.start;
+  // Beat-locked source time: s6 beat n ↔ source beat n + offset, wrapped inside the source window.
   function srcTime(c, lt) {
     const s = SCN[c.src[0]], d = s.end - s.start;
-    const x = c.src[1] + (lt - c.sw0) - s.start;
+    const x = T6 + lt + c.src[1] * BEAT - s.start;
     return s.start + (((x % d) + d) % d);
   }
 
@@ -318,48 +377,79 @@
   const LADDER = [[480, 270], [640, 360], [960, 540], [1280, 720]];
   const pickLayer = (needW) => LADDER.find((s) => s[0] >= needW * 0.97) || LADDER[LADDER.length - 1];
 
+  // Per-universe panel canvases, stamped with the source time they hold. A universe is only
+  // re-rendered when that time changes, so a newborn copy wearing its parent's universe shares
+  // the parent's render, and extra motion-blur samples reuse the content (see contentLt).
+  const PANELS = new Map();
+  function panelCanvas(id, LW, LH) {
+    const k = id + '@' + LW;
+    let e = PANELS.get(k);
+    if (!e) {
+      const canvas = document.createElement('canvas');
+      canvas.width = LW;
+      canvas.height = LH;
+      e = { canvas, ctx: canvas.getContext('2d'), stamp: '' };
+      PANELS.set(k, e);
+    }
+    return e;
+  }
+  // Local time at which panel CONTENT is sampled for this sub-frame. Above 4 blur samples the
+  // content keeps the reel's standard 4 sub-frame times (each reused by S/4 neighbours) while
+  // the panel geometry — the fast part — is drawn at every sample.
+  function contentLt(lt, api) {
+    const S = api.samples || 1;
+    if (S <= 4 || !api.subDt || api.frameT === undefined) return lt;
+    const i = Math.round((api.t - api.frameT) / api.subDt);
+    const g = Math.floor((i * 4) / S);
+    return lt + (api.frameT + (g * api.subDt * S) / 4 - api.t);
+  }
+
   // Render cell c's universe, cover-fitted with a slow push-in, into (x, y, w, h).
-  // key names the layer: the cell doing the drawing (a child copy never shares its parent's).
-  function drawUniverse(ctx, c, lt, api, x, y, w, h, key) {
+  function drawUniverse(ctx, c, lt, api, x, y, w, h) {
     if (w < 20 || h < 12) {
       ctx.fillStyle = c.tone;
       ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
       return;
     }
-    const zoom = 1.02 + 0.03 * clamp(lt - c.sw0, 0, 2); // constant drift — never static
+    const zoom = (c.zoom || 1) * (1.02 + 0.03 * clamp(lt - c.sw0, 0, 2)); // constant drift — never static
     const [LW, LH] = pickLayer(Math.max(w, (h * 16) / 9) * zoom);
-    // one layer per cell (and rung): re-using a single scratch canvas for every panel forces
-    // the GPU to snapshot it before each clear — a flush stall per panel
-    const L = api.layer('panel-' + key, LW, LH);
-    const lc = L.ctx;
-    lc.fillStyle = P.ink;
-    lc.fillRect(0, 0, LW, LH);
-    const t = srcTime(c, lt);
-    try {
-      // exact ladder size → the nested scene's api.detail only ever takes 4 values
-      R.renderScene(c.src[0], t, lc, 0, 0, LW, LH);
-    } catch (e) {
-      R.errors.push({ scene: 's6-panel', t: api.t, msg: `${c.id}:${c.src[0]}@${t.toFixed(3)} ` + String(e && e.stack) });
-      for (let i = 0; i < 64; i++) lc.restore(); // unwind whatever the failed scene left saved
+    const L = panelCanvas(c.id, LW, LH);
+    const t = srcTime(c, contentLt(lt, api));
+    const stamp = t.toFixed(6) + '|' + (api.samples || 1); // nested scenes may box-filter by subDt
+    if (L.stamp !== stamp) {
+      const lc = L.ctx;
+      R.resetCtx(lc);
+      lc.fillStyle = P.ink;
+      lc.fillRect(0, 0, LW, LH);
+      try {
+        // exact ladder size → the nested scene's api.detail only ever takes 4 values
+        R.renderScene(c.src[0], t, lc, 0, 0, LW, LH);
+      } catch (e) {
+        R.errors.push({ scene: 's6-panel', t: api.t, msg: `${c.id}:${c.src[0]}@${t.toFixed(3)} ` + String(e && e.stack) });
+        for (let i = 0; i < 64; i++) lc.restore(); // unwind whatever the failed scene left saved
+      }
+      L.stamp = stamp;
     }
-    // cover-fit crop to the panel's aspect, tightened by the push-in
+    // cover-fit crop to the panel's aspect, tightened by the push-in, around the focus point
     const a = w / h;
     let sw = LW, sh = LW / a;
     if (sh > LH) { sh = LH; sw = LH * a; }
     sw /= zoom; sh /= zoom;
-    ctx.drawImage(L.canvas, (LW - sw) / 2, (LH - sh) / 2, sw, sh, x, y, w, h);
+    const [fx, fy] = c.focus || [CX, CY];
+    const sx = clamp((fx / W) * LW - sw / 2, 0, LW - sw), sy = clamp((fy / H) * LH - sh / 2, 0, LH - sh);
+    ctx.drawImage(L.canvas, sx, sy, sw, sh, x, y, w, h);
   }
 
   // A cell's look: its live universe or its graphic tile.
-  function drawLook(ctx, c, lt, api, x, y, w, h, key = c.id) {
-    if (c.live) drawUniverse(ctx, c, lt, api, x, y, w, h, key);
+  function drawLook(ctx, c, lt, api, x, y, w, h) {
+    if (c.live) drawUniverse(ctx, c, lt, api, x, y, w, h);
     else drawTile(ctx, c, lt, x, y, w, h);
   }
   // A newborn wears its parent's look: a live universe stays live; a tile is a snapshot
   // frozen at the split (so its counter doesn't tick in four places at once).
   function drawParentLook(ctx, c, lt, api, x, y, w, h) {
     const p = c.parent;
-    drawLook(ctx, p, p.live ? lt : Math.min(lt, c.t0[c.born]), api, x, y, w, h, c.id + '<' + p.id);
+    drawLook(ctx, p, p.live ? lt : Math.min(lt, c.t0[c.born]), api, x, y, w, h);
   }
 
   // Stage-1 bone doors: fraction v of the panel, anchored at the outer edge.
@@ -370,29 +460,41 @@
     else ctx.fillRect(x + w * (1 - v), y - 1, w * v + 1, h + 2);
   }
 
-  // Source chip: "S2  02:07" — scene id + the source's live timecode (seconds:frames).
-  function drawChip(ctx, c, lt, a, x, y) {
+  // Source chip: "S2  02:07" — scene id + the source's live timecode (seconds:frames). On its
+  // first appearance the pill wipes open and the string decodes from a scramble in 4 frames.
+  const SCRAMBLE = '0123456789#/:+';
+  function drawChip(ctx, c, lt, a, x, y, api) {
     if (a <= 0.01) return;
+    const cs = lt - c.chip0;
     const t = srcTime(c, lt);
     const ss = String(Math.floor(t)).padStart(2, '0'), ff = String(Math.floor((t % 1) * 60)).padStart(2, '0');
     const txt = `${c.src[0].toUpperCase()}  ${ss}:${ff}`;
     R.font(ctx, { family: 'JetBrains Mono', weight: 500, size: 13, spacing: 1.5, align: 'left', baseline: 'middle' });
-    const shown = txt.slice(0, Math.ceil(txt.length * clamp(a * 1.4)));
-    const tw = ctx.measureText(shown).width;
+    const adv = ctx.measureText(txt).width / txt.length;
+    const pw = (adv * txt.length + 16) * E.expoOut(seg(cs, 0, CHIP_IN));
+    if (pw < 2) return;
     ctx.globalAlpha = a;
     ctx.fillStyle = R.col.rgba(P.ink, 0.72);
     ctx.beginPath();
-    rrPath(ctx, x, y, tw + 16, 22, [4, 4, 4, 4]);
+    rrPath(ctx, x, y, pw, 22, [4, 4, 4, 4]);
     ctx.fill();
+    const k = Math.floor(txt.length * clamp(cs / CHIP_DEC));
+    let s = txt.slice(0, k);
+    if (k < txt.length) {
+      const fr = Math.round((api.frameT !== undefined ? api.frameT : api.t) * 60);
+      for (let i = k; i < txt.length && 8 + (i + 1) * adv <= pw; i++) {
+        s += txt[i] === ' ' ? ' ' : SCRAMBLE[Math.floor(R.hash(fr * 13.1 + i * 7.7 + c.id.charCodeAt(0)) * SCRAMBLE.length)];
+      }
+    }
     ctx.fillStyle = P.bone;
-    ctx.fillText(shown, x + 8, y + 11.5);
+    ctx.fillText(s, x + 8, y + 11.5);
     ctx.globalAlpha = 1;
   }
 
   // ── graphic tiles ──
-  // Mono numeral with per-digit slot-machine rolls. rolls: [[t, from, to], ...] in time order.
-  // Digits roll through a slot window from just above cap height down to the baseline: the
-  // old digit exits through the top edge as the new one rises out of the baseline.
+  // Mono numeral with per-digit slot-machine rolls. rolls: [[t, from, to, ease?, dur?, stagger?],
+  // ...] in time order. Digits roll through a slot window from just above cap height down to the
+  // baseline: the old digit exits through the top edge as the new one rises out of the baseline.
   function rollNumber(ctx, lt, rolls, x, base, size, fill) {
     ctx.save();
     ctx.beginPath();
@@ -408,7 +510,8 @@
       const dx = x + i * adv;
       if (active) {
         const from = active[1][i] || ' ', to = active[2][i] || ' ';
-        const u = POS(seg(lt, active[0] + 0.03 * i, active[0] + 0.03 * i + 0.14));
+        const t0 = active[0] + (active[5] ?? 0.03) * i;
+        const u = (active[3] || POS)(seg(lt, t0, t0 + (active[4] || 0.14)));
         if (from !== to && u < 1) {
           if (from !== ' ') ctx.fillText(from, dx, base - u * lineH);
           if (to !== ' ') ctx.fillText(to, dx, base + (1 - u) * lineH);
@@ -426,6 +529,10 @@
     ctx.fillText(txt, x, y);
   }
 
+  // the centre counter: 04 → 09 as it punches out; 09 → 16 slams in on the b27 beat frame, both
+  // digits together (a stagger would flash a wrong '19' for two frames)
+  const COUNT_ROLLS = [[B2 + 0.04, '04', '09'], [B3 - 0.005, '09', '16', E.expoOut, 0.11, 0]];
+
   function drawTile(ctx, c, lt, x, y, w, h) {
     const pad = Math.max(10, h * 0.065);
     const size = h * 0.62;
@@ -433,7 +540,7 @@
       ctx.fillStyle = P.signal;
       ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
       tileLabel(ctx, 'UNIVERSES', x + pad, y + pad, P.ink);
-      rollNumber(ctx, lt, [[c.t0[3] + 0.1, '04', '09'], [B3 - 0.02, '09', '16']], x + pad - size * 0.04, y + h - pad * 0.9, size, P.ink);
+      rollNumber(ctx, lt, COUNT_ROLLS, x + pad - size * 0.04, y + h - pad * 0.9, size, P.ink);
     } else if (c.tile === 'bpm') {
       ctx.fillStyle = P.ultra;
       ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
@@ -444,7 +551,7 @@
       ctx.beginPath();
       ctx.arc(x + w - pad - 5, y + pad + 7, 4.5 + 2.5 * Math.exp(-ph * 14), 0, TAU);
       ctx.fill();
-      rollNumber(ctx, lt, [[c.sw0, '   ', '128']], x + pad - size * 0.04, y + h - pad * 0.9, size, P.bone);
+      rollNumber(ctx, lt, [[c.sw0, '   ', '128', POS, 0.12, 0.02]], x + pad - size * 0.04, y + h - pad * 0.9, size, P.bone);
     } else if (c.tile === 'origin') {
       ctx.fillStyle = P.bone;
       ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
@@ -467,7 +574,7 @@
     if (w < 0.5 || h < 0.5) return;
     const x = cx - w / 2, y = cy - h / 2;
     ctx.beginPath();
-    rrPath(ctx, x, y, w, h, st.radii);
+    cellPath(ctx, c, st, lt);
     if (st.tone >= 0.999) {
       ctx.fillStyle = c.inner ? P.bone : c.tone;
       ctx.fill();
@@ -476,8 +583,22 @@
     ctx.save();
     ctx.clip();
     if (c.born === 1) {
-      // the two first cards: live underneath, bone doors sliding apart
-      if (st.swap > 0) drawLook(ctx, c, lt, api, x, y, w, h);
+      // the two first cards: live underneath, bone doors blown apart. While the cards are still
+      // folding in from the flood, the universes only show inside the HUD safe frame — the
+      // flood's bone stays around them as a matte, so no HUD corner ever sits on content.
+      if (st.swap > 0) {
+        const matte = x < SAFE[0] || y < SAFE[1] || x + w > SAFE[2] || y + h > SAFE[3];
+        if (matte) {
+          ctx.fillStyle = P.bone;
+          ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(SAFE[0], SAFE[1], SAFE[2] - SAFE[0], SAFE[3] - SAFE[1]);
+          ctx.clip();
+        }
+        drawLook(ctx, c, lt, api, x, y, w, h);
+        if (matte) ctx.restore();
+      }
       drawDoor(ctx, 1 - st.swap, c.dir, x, y, w, h);
     } else if (!c.parent || st.swap >= 1) {
       drawLook(ctx, c, lt, api, x, y, w, h);
@@ -492,11 +613,16 @@
       const ox = hz ? off : 0, oy = hz ? 0 : off;
       drawParentLook(ctx, c, lt, api, x + ox, y + oy, w, h);
       drawLook(ctx, c, lt, api, x + ox - (hz ? L * s : 0), y + oy - (hz ? 0 : L * s), w, h);
-      // the seam: a hairline of bone riding the join, brightest mid-push
-      ctx.globalAlpha = Math.sin(Math.PI * v);
+      // the seam: a hairline of bone riding the join, brightest mid-push. Box-filtered across
+      // this sub-frame's slice of the shutter, so the fast seam streaks instead of strobing.
+      const hd = (api.subDt || 0) / 2;
+      const va = POS(seg(lt - hd, c.sw0, c.sw0 + c.swD)), vb = POS(seg(lt + hd, c.sw0, c.sw0 + c.swD));
+      const p0 = (s > 0 ? Math.min(va, vb) : 1 - Math.max(va, vb)) * L - 1;
+      const bw = Math.abs(vb - va) * L + 2;
+      ctx.globalAlpha = Math.sin(Math.PI * v) * Math.min(1, 2 / bw + 0.15);
       ctx.fillStyle = P.bone;
-      if (hz) ctx.fillRect(x + (s > 0 ? v * w : (1 - v) * w) - 1, y - 1, 2, h + 2);
-      else ctx.fillRect(x - 1, y + (s > 0 ? v * h : (1 - v) * h) - 1, w + 2, 2);
+      if (hz) ctx.fillRect(x + p0, y - 1, bw, h + 2);
+      else ctx.fillRect(x - 1, y + p0, w + 2, bw);
       ctx.globalAlpha = 1;
     }
     if (st.tone > 0) {
@@ -510,21 +636,50 @@
       ctx.strokeStyle = R.col.rgba(P.bone, bz);
       ctx.lineWidth = 2;
       ctx.beginPath();
-      rrPath(ctx, x, y, w, h, st.radii);
+      cellPath(ctx, c, st, lt);
       ctx.stroke();
     }
-    if (c.live && st.chipA > 0) drawChip(ctx, c, lt, st.chipA, x + 10, y + 10);
+    if (c.live && st.chipA > 0) drawChip(ctx, c, lt, st.chipA, x + 10, y + 10, api);
     // the bloom paints last: the dot swallows everything in the inner four, UI included
-    if (c.inner) {
-      const b = bloomR(lt);
-      if (b > 0) {
-        ctx.fillStyle = P.bone;
-        ctx.beginPath();
-        ctx.arc(CX, CY, b, 0, TAU);
-        ctx.fill();
-      }
-    }
+    if (c.inner) drawBloom(ctx, lt, api);
     ctx.restore();
+  }
+
+  // The bloom disc, box-filtered across this sub-frame's slice of the shutter (a soft rim from
+  // r(t − ½subDt) to r(t + ½subDt)), so its fast growth fuses instead of stepping into rings.
+  function drawBloom(ctx, lt, api) {
+    const hd = (api.subDt || 0) / 2;
+    const ra = bloomR(lt - hd), rb = bloomR(lt + hd);
+    if (rb <= 0) return;
+    ctx.beginPath();
+    if (rb - ra < 1) {
+      ctx.fillStyle = P.bone;
+      ctx.arc(CX, CY, bloomR(lt), 0, TAU);
+    } else {
+      const g = ctx.createRadialGradient(CX, CY, ra, CX, CY, rb);
+      g.addColorStop(0, P.bone);
+      g.addColorStop(1, R.col.rgba(P.bone, 0));
+      ctx.fillStyle = g;
+      ctx.arc(CX, CY, rb, 0, TAU);
+    }
+    ctx.fill();
+  }
+
+  // The crack's hot core: a signal filament down the middle of the tear on the impact frames.
+  function drawCrackCore(ctx, lt, rectA) {
+    const a = 1 - E.quadOut(seg(lt, 0, 0.06));
+    if (a <= 0.01 || !rectA) return;
+    const y = rectA[1] - rectA[3] / 2, h = rectA[3];
+    ctx.strokeStyle = R.col.rgba(P.signal, a);
+    ctx.lineWidth = 2 + 3 * a;
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    CRACK.forEach(([v, dx], i) => {
+      const px = CX + dx * jagAmp(lt), py = y + v * h;
+      if (i) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    });
+    ctx.stroke();
   }
 
   // Registration crosses in the gutter intersections: pop after each stage lands.
@@ -554,6 +709,18 @@
     R.unshake(ctx, api, w);
   }
 
+  // Motion-blur samples (only when the render uses blur): 16 wherever hard edges move more
+  // than ~15 px per sub-frame at the standard 4 — the doors blown open, the implosion, the fast
+  // middle of every push — and 8 around each split whip (~6 px steps at 4). Panel content
+  // stays at 4 renders per frame (contentLt), so the extra samples only cost compositing.
+  function samplesAt(lt) {
+    if (lt < 0.15) return 16;
+    if (lt >= OUT0 && lt < T_CLEAN) return 16;
+    for (const c of CELLS) if (c.born > 1 && lt > c.sw0 + 0.15 * c.swD && lt < c.sw0 + 0.8 * c.swD) return 16;
+    for (let k = 2; k <= 4; k++) if (lt > TR[k].b - 0.08 && lt < TR[k].b + 0.08) return 8;
+    return 0;
+  }
+
   // ═════════════════════════════ scene ═════════════════════════════
   // Boot-time warm-up: render every (scene, ladder rung) pair the panels will ever use once,
   // so one-off costs — above all a WebGL context + shader compile per new target size in
@@ -569,7 +736,7 @@
         if (w < 20 || h < 12) continue;
         for (const o of [c, c.parent]) {
           if (!o || !o.live) continue;
-          const zoom = 1.02 + 0.03 * clamp(lt - o.sw0, 0, 2);
+          const zoom = (o.zoom || 1) * (1.02 + 0.03 * clamp(lt - o.sw0, 0, 2));
           const rung = pickLayer(Math.max(w, (h * 16) / 9) * zoom);
           pairs.set(o.src[0] + '@' + rung[0], [o, rung]);
         }
@@ -578,7 +745,7 @@
     for (const [o, [LW, LH]] of pairs.values()) {
       const L = R.layer('s6:warm', LW, LH);
       try {
-        R.renderScene(o.src[0], o.src[1], L.ctx, 0, 0, LW, LH);
+        R.renderScene(o.src[0], srcTime(o, o.sw0), L.ctx, 0, 0, LW, LH);
       } catch (e) {
         for (let i = 0; i < 64; i++) L.ctx.restore();
       }
@@ -588,12 +755,16 @@
   R.scene({
     id: 's6',
     shake: 0.8,
+    samplesAt,
     init() {
       try { warmUp(); } catch (e) { /* never let a neighbour's scene block boot */ }
     },
-    debug: () => ({ CELLS, OUTER, slot, cellState }),
+    debug: () => ({ CELLS, OUTER, slot, cellState, samplesAt }),
     render(ctx, lt, api) {
       pinShake(ctx, api, smoothstep(T_CLEAN - 0.035, T_CLEAN, lt));
+      // the frame opens as a flat bone field (keep it flat, as s5 leaves it); the default
+      // vignette returns as the ink takes over
+      if (api.detail === 1 && api.post) api.post.vignette = lerp(0.05, 0.22, smoothstep(0.08, 0.3, lt));
 
       // ── contract out: ink + the dot, nothing else ──
       if (lt >= T_CLEAN) {
@@ -603,15 +774,6 @@
         ctx.fill();
         return;
       }
-      // ── contract in: the flood, before the crack has opened a pixel ──
-      if (lt <= T_OPEN) {
-        ctx.fillStyle = P.bone;
-        ctx.fillRect(-PAD, -PAD, W + 2 * PAD, H + 2 * PAD);
-        return;
-      }
-
-      // Nested scenes must never touch this frame's post (they guard on detail — be sure anyway).
-      const postSaved = api.post ? Object.assign({}, api.post) : null;
 
       const states = [];
       for (const c of DRAW) {
@@ -638,12 +800,8 @@
         ctx.fill();
       }
 
+      if (lt < 0.07) drawCrackCore(ctx, lt, states.find(([c]) => c.id === 'A')?.[1].rect);
       drawCrosses(ctx, lt);
-
-      if (postSaved) {
-        for (const k of Object.keys(api.post)) if (!(k in postSaved)) delete api.post[k];
-        Object.assign(api.post, postSaved);
-      }
     },
   });
 })();
