@@ -11,12 +11,16 @@
 // Beats (lt): 0 · .46875 · .9375 · 1.40625 — contacts land ON those frames.
 //
 // Handoff contract @1.875: P.ink + bone dot r=28 at (960,540), perfectly round,
-// nothing else on screen. Clean from CLEAN_T = 1.812 → frames 109–112 (and every
-// motion-blur sub-sample up to 1.8729) are pixel-identical.
+// nothing else on screen. DIRECTION: arrive at most 1–2 frames early, so the world
+// is absorbed into the dot right up to the cut: frame 111 (1.850) still catches the
+// last wisp of halo and streaks, and from CLEAN_T = 1.8635 every motion-blur slice of
+// frame 112 (1.8646 … 1.8729) is the contract state — the only held frame. Camera
+// shake is cancelled (R.unshake) before that, so the contract frame is pixel-exact.
 //
 // Craft notes: contact squash is keyed (not simulated) so it lands on the beat frame;
 // the floor is a trampoline spring; ticks hop like tiny dots; the dot box-filters its
-// own motion blur so the engine's 4 sub-frames don't strobe (see drawDot).
+// own motion blur so the engine's sub-frames don't strobe (see drawDot). The thesis
+// line is screen-space type (integer baseline and pitch), so the dolly never softens it.
 //
 // Every value is a pure function of t; static data is precomputed below.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,8 +41,24 @@
   const TICK_STEP = 48;
   const NT = 16;             // ticks at k = −16 … 16 (every 4th major; the ruler ends on majors,
                              // the hairline runs on another 96px and fades)
-  const TEXT_Y = 770;        // baseline of the typed line
-  const CLEAN_T = 1.812;     // from here on, the dot is the only thing on screen
+  const TEXT_Y = 772;        // baseline of the typed line (screen space)
+  const TEXT_SIZE = 24;      // the thesis line: a deliberate exception to the 14–20px mono labels
+  const TEXT_TRACK = 3.6;    // letter-spacing; with the 14.4px advance → an integer 18px pitch
+
+  // ───────────────────────── the inhale → contract ─────────────────────────
+  // Everything converges on the dot and lands on the cut, not before it (≤ 1–2 frames early).
+  // Frame 111 (1.850) shows the last wisp being absorbed; frame 112 (1.8667) is the contract.
+  const RETRACT0 = 1.613, RETRACT1 = 1.808; // ruler tape-measure retract into the centre
+  const STREAK0 = 1.649;                    // first reverse speed line launches (last absorbed ≈1.851)
+  const HALO0 = 1.653, HALO1 = 1.858;       // halo ring + glow tighten onto the dot
+  const ZIP0 = 1.803;                       // the floor's last point flashes and zips up (absorbed ≈1.853)
+  const LOCK0 = 1.708, LOCK1 = 1.843;       // rise → exact centre; perfectly round by 1.838
+  const TREM1 = 1.859;                      // tension tremble is gone
+  const CAM1 = 1.858;                       // the dolly lands on exactly 1.0
+  const CLEAN_T = 1.8635;                   // from here on, the dot is the only thing on screen
+                                            // (frame 112's first blur slice starts at 1.8646)
+  const SEED_T = 0.008;                     // the floor's seed dot pops (frame 0 stays solid ink)
+  const FLOOR_A = 0.55;                     // hairline floor opacity (survives the 1080p encode)
 
   // ───────────────────────── helpers ─────────────────────────
   // Cubic Hermite: position from p0 (vel v0) to p1 (vel v1) over duration D, u ∈ 0..1.
@@ -183,11 +203,11 @@
     const vx = (CX - RISE_X0) * df, vy = (CY - RISE_Y0) * df;
     let s = stretchFromSpeed(Math.hypot(vx, vy));
     const a = axisAngle(vx, vy);
-    // Lock to the contract: exact centre and perfectly round well before the cut.
-    const lock = smoothstep(1.66, 1.79, t);
+    // Lock to the contract: exact centre and perfectly round by the last frames.
+    const lock = smoothstep(LOCK0, LOCK1, t);
     x = lerp(x, CX, lock);
     y = lerp(y, CY, lock);
-    s = 1 + (s - 1) * (1 - smoothstep(1.68, 1.78, t));
+    s = 1 + (s - 1) * (1 - smoothstep(LOCK0 + 0.02, LOCK1 - 0.005, t));
     return { x, y, s, a, bottom: y + halfExtY(s, a) };
   }
 
@@ -241,15 +261,17 @@
     TICKS.push({
       k,
       x: CX + k * TICK_STEP,
-      len: k === 0 ? 22 : ak % 4 === 0 ? 15 : 7,
-      alpha: k === 0 ? 0.62 : ak % 4 === 0 ? 0.5 : 0.3,
+      // Clear hierarchy that survives compression: centre > major > minor.
+      len: k === 0 ? 26 : ak % 4 === 0 ? 18 : 8,
+      alpha: k === 0 ? 0.95 : ak % 4 === 0 ? 0.8 : 0.42,
       tPop: 0.075 + 0.23 * Math.pow(ak / NT, 0.92),
     });
   }
 
   // Typing schedule — human rhythm (seeded jitter, a beat of hesitation after spaces).
+  // The full line holds from TYPE_T1 to DEL_T0 (440 ms, across contact 3) so it can be read.
   const LINE = 'EVERYTHING STARTS WITH A DOT.';
-  const TYPE_T0 = 0.5, TYPE_T1 = 1.3;
+  const TYPE_T0 = 0.5, TYPE_T1 = 1.12;
   const TYPE_AT = (() => {
     const rnd = R.rng(0x5eed1);
     const gaps = [];
@@ -265,11 +287,13 @@
     return out;
   })();
   // Backspace: one tap, the key-repeat delay, then auto-repeat (much faster than typing).
-  const DEL_T0 = 1.5, DEL_REPEAT = 1.555, DEL_T1 = 1.722;
+  const DEL_T0 = 1.56, DEL_REPEAT = 1.58, DEL_T1 = 1.73;
   const DEL_AT = LINE.split('').map((_, j) => (j === 0 ? DEL_T0 : DEL_REPEAT + ((j - 1) / (LINE.length - 2)) * (DEL_T1 - DEL_REPEAT)));
   const CURSOR_IN = BEAT; // the cursor is born on contact 1
-  const CURSOR_OFF = [[1.352, 1.434]]; // one blink during the idle beat
-  const CURSOR_OUT = [1.732, 1.758];
+  // One idle blink; it relights on the contact-3 frame (f84). Both edges fall in the gaps
+  // between frame shutters, so no frame shows a half-blurred cursor.
+  const CURSOR_OFF = [[1.29, 1.392]];
+  const CURSOR_OUT = [1.742, 1.772];
 
   // Converging speed lines (reverse speed lines into the dot).
   // A coherent ring of 14 streaks (not a random spray): same launch radius band,
@@ -280,7 +304,7 @@
     for (let j = 0; j < n; j++) {
       const i = (j * 5) % n; // interleaved order: consecutive streaks never neighbour
       const ang = (i / n) * TAU + 0.11 + (rnd() - 0.5) * 0.12;
-      const start = 1.592 + (j / (n - 1)) * 0.046 + rnd() * 0.006; // all absorbed by ≈1.808
+      const start = STREAK0 + (j / (n - 1)) * 0.046 + rnd() * 0.006; // all absorbed by ≈1.853
       const dur = 0.118 + rnd() * 0.008;
       out.push({ ang, start, dur, r0: 520 + rnd() * 70, w: 1.2 + rnd() * 0.3, a: 0.42 + rnd() * 0.16 });
     }
@@ -294,21 +318,34 @@
     return grow * rulerScale(t);
   };
   // Ruler collapse into centre (tape-measure retract, with a hair of anticipation).
-  const rulerScale = (t) => 1 - E.backIn(seg(t, 1.56, 1.755), 0.9);
+  const rulerScale = (t) => 1 - E.backIn(seg(t, RETRACT0, RETRACT1), 0.9);
   // Everything that isn't the dot fades out ahead of the contract.
-  const auxFade = (t) => 1 - smoothstep(1.7, CLEAN_T - 0.004, t);
+  const auxFade = (t) => 1 - smoothstep(RETRACT0 + 0.14, CLEAN_T - 0.004, t);
   // Camera: a slow dolly-in on the contract point that leans into the inhale and lands
-  // on exactly 1.0 (so the handoff dot is exactly r=28 at 960,540) before the held frames.
+  // on exactly 1.0 (so the handoff dot is exactly r=28 at 960,540) on the last frames.
   const CAM_EASE = E.bezier(0.5, 0, 0.3, 1);
-  const camScale = (t) => lerp(0.962, 1, CAM_EASE(seg(t, 0, 1.795)));
+  const camScale = (t) => lerp(0.962, 1, CAM_EASE(seg(t, 0, CAM1)));
+  const withCamera = (ctx, t, fn) => {
+    const cam = camScale(t);
+    ctx.save();
+    if (cam !== 1) {
+      ctx.translate(CX, CY);
+      ctx.scale(cam, cam);
+      ctx.translate(-CX, -CY);
+    }
+    fn();
+    ctx.restore();
+  };
 
   // ───────────────────────── drawing ─────────────────────────
   // The final render averages 4 sub-frames across a 180° shutter (1/480 s apart). At
   // 4000+ px/s that strobes into 4 hard-edged ghosts. So each sub-frame box-filters its own
-  // slice of the shutter: 5 stamps over the preceding 1/480 s, summed additively at 1/5
-  // (255/5 = 51 → exactly opaque where all overlap). The 4 slices tile the shutter and the
+  // slice of the shutter: 5 stamps over the preceding api.subDt, summed additively at 1/5
+  // (255/5 = 51 → exactly opaque where all overlap). The slices tile the shutter and the
   // smear becomes a continuous ramp. Stationary → one plain, perfectly round circle.
-  const SUB_DT = 0.5 / 60 / 4;
+  // Without engine blur (samples = 1) it still smears over a 1/480 s slice.
+  const SUB_DT_DEFAULT = 0.5 / 60 / 4;
+  const sliceDt = (api) => (api.subDt > 0 ? api.subDt : SUB_DT_DEFAULT);
   const SUB_STAMPS = 5;
   const DOT_BOX = 224;
   // Each stamp starts its own sub-path exactly at its arc start (no connecting segments).
@@ -321,6 +358,7 @@
     }
   }
   function drawDot(ctx, api, t, jx, jy) {
+    const SUB_DT = sliceDt(api);
     const b = ball(t);
     const p0 = ball(Math.max(0, t - SUB_DT));
     const change = Math.hypot(b.x - p0.x, b.y - p0.y) + RAD * Math.abs(b.s - p0.s);
@@ -350,12 +388,13 @@
   // senses the falling dot, and a flash at each contact.
   function drawFloor(ctx, t, b, detail) {
     const half = floorHalf(t);
-    // The seed: the floor itself starts as a dot.
-    const seedA = seg(t, 0.0, 0.05) * (1 - seg(t, 0.09, 0.2));
+    // The seed: the floor itself starts as a dot. It pops after frame 0's shutter closes,
+    // so frame 0 is the contract's solid ink.
+    const seedA = seg(t, SEED_T, SEED_T + 0.04) * (1 - seg(t, 0.1, 0.22));
     if (seedA > 0) {
-      ctx.fillStyle = bone(0.85 * seedA);
+      ctx.fillStyle = bone(seedA);
       ctx.beginPath();
-      ctx.arc(CX, FLOOR_Y, 3.2 * E.backOut(seg(t, 0.0, 0.06)), 0, TAU);
+      ctx.arc(CX, FLOOR_Y, 4.2 * E.backOut(seg(t, SEED_T, SEED_T + 0.06), 2.4), 0, TAU);
       ctx.fill();
     }
     if (half < 0.75) return;
@@ -365,14 +404,14 @@
     const near = Math.pow(1 - clamp(hb / 280), 2);
     const alphaAt = (x) => {
       const end = smoothstep(0, fadeLen, Math.min(x - x0, x1 - x));
-      let a = 0.35 * end;
+      let a = FLOOR_A * end;
       const dx = (x - b.x) / (70 + Math.max(0, hb) * 0.35);
-      a += 0.32 * near * Math.exp(-dx * dx) * end;
+      a += 0.3 * near * Math.exp(-dx * dx) * end;
       for (const c of CT) {
         const tau = t - c.tT;
         if (tau < 0 || tau > 0.5) continue;
         const d = (x - c.x) / (40 + 520 * tau);
-        a += 0.55 * c.ring * Math.exp(-11 * tau) * Math.exp(-d * d);
+        a += 0.5 * c.ring * Math.exp(-11 * tau) * Math.exp(-d * d);
       }
       return Math.min(1, a) * auxFade(t);
     };
@@ -395,28 +434,37 @@
 
   // Elliptical ripples on the floor plane after each contact (two rings, staggered).
   // Front arc brighter than the back arc — reads as a ring lying on a ground plane.
-  function drawRipples(ctx, t) {
+  // The seed's own ping opens the film: the ground plane is announced before the floor exists.
+  // The seed pops (f1–f2), then pings (from f2), then the floor unrolls out of it (f4 on).
+  // The expoOut burst opens a ring at ~5000 px/s, so each ring is stamped across its own
+  // shutter slice (≤1.5px apart, opacity split between stamps) instead of strobing into rings.
+  const SEED_RIPPLE = { tc: SEED_T + 0.025, x: CX, ring: 0.8, r0: 5 };
+  function drawRipples(ctx, t, api) {
     const fade = auxFade(t);
+    const sd = sliceDt(api);
     ctx.lineCap = 'butt';
-    for (const c of CT) {
+    for (const c of [SEED_RIPPLE, ...CT]) {
       for (let j = 0; j < 2; j++) {
         const t0 = c.tc + 0.004 + j * 0.07, dur = 0.42 - j * 0.08;
         const u = seg(t, t0, t0 + dur);
         if (u <= 0 || u >= 1) continue;
-        const e = E.expoOut(u);
-        const rx = lerp(30, 360 - j * 110, e) * (0.7 + 0.3 * c.ring);
-        const ry = rx * 0.105;
-        const a = (j ? 0.2 : 0.34) * c.ring * Math.pow(1 - u, 1.8) * fade;
+        const rxAt = (v) => lerp(c.r0 ?? 30, 360 - j * 110, E.expoOut(v)) * (0.7 + 0.3 * c.ring);
+        const rx = rxAt(u), rxPrev = rxAt(seg(t - sd, t0, t0 + dur));
+        const a = (j ? 0.36 : 0.6) * c.ring * Math.pow(1 - u, 1.6) * fade;
         if (a < 0.004) continue;
-        ctx.lineWidth = lerp(1.5, 0.75, u);
-        ctx.strokeStyle = bone(a * 0.45); // back half
-        ctx.beginPath();
-        ctx.ellipse(c.x, FLOOR_Y, rx, ry, 0, Math.PI, TAU);
-        ctx.stroke();
-        ctx.strokeStyle = bone(a); // front half
-        ctx.beginPath();
-        ctx.ellipse(c.x, FLOOR_Y, rx, ry, 0, 0, Math.PI);
-        ctx.stroke();
+        const n = clamp(Math.ceil((rx - rxPrev) / 1.5), 1, 8);
+        ctx.lineWidth = lerp(2, 1, u);
+        for (let k = 0; k < n; k++) {
+          const r = n === 1 ? rx : lerp(rxPrev, rx, (k + 1) / n);
+          ctx.strokeStyle = bone((a * 0.45) / n); // back half
+          ctx.beginPath();
+          ctx.ellipse(c.x, FLOOR_Y, r, r * 0.105, 0, Math.PI, TAU);
+          ctx.stroke();
+          ctx.strokeStyle = bone(a / n); // front half
+          ctx.beginPath();
+          ctx.ellipse(c.x, FLOOR_Y, r, r * 0.105, 0, 0, Math.PI);
+          ctx.stroke();
+        }
       }
     }
   }
@@ -435,8 +483,13 @@
   }
 
   // Ruler ticks: stagger pop from the centre, ride the dip, hop on contacts, retract.
-  function drawTicks(ctx, t) {
+  // The retract whips the outer ticks inward at >10000 px/s, which the engine's point
+  // sub-samples would strobe into hard copies. Each tick therefore box-filters its own
+  // slice of the shutter: a 2px line swept across d px is a (d+2)px band at 2/(d+2) opacity.
+  const TICK_W = 2;
+  function drawTicks(ctx, t, api) {
     const sc = rulerScale(t);
+    const scPrev = rulerScale(t - sliceDt(api));
     const fade = auxFade(t);
     if (fade <= 0) return;
     ctx.lineCap = 'butt';
@@ -445,6 +498,7 @@
       if (tp <= 0) continue;
       const pop = R.spring(tp, { k: 700, c: 22 });
       const x = CX + (tk.x - CX) * sc;
+      const sweep = Math.abs(tk.x - CX) * (scPrev - sc); // px travelled during this slice
       let hop = 0, lift = 0;
       for (const c of CT) {
         const h = tickHop(c, tk.x, t);
@@ -456,13 +510,20 @@
       const len = tk.len * pop * squeeze * (1 + 0.28 * hop); // a little stretch in the air
       if (len < 0.3) continue;
       const base = FLOOR_Y + floorDip(x, t) - 1 - lift; // sit on top of the 2px line
-      const a = Math.min(0.8, (tk.alpha + 0.3 * hop) * clamp(tp / 0.04)) * fade * (0.3 + 0.7 * squeeze);
-      ctx.strokeStyle = bone(a);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x, base);
-      ctx.lineTo(x, base - len);
-      ctx.stroke();
+      const a = Math.min(1, (tk.alpha + 0.3 * hop) * clamp(tp / 0.04)) * fade * (0.3 + 0.7 * squeeze);
+      if (sweep < 0.5) {
+        ctx.strokeStyle = bone(a);
+        ctx.lineWidth = TICK_W;
+        ctx.beginPath();
+        ctx.moveTo(x, base);
+        ctx.lineTo(x, base - len);
+        ctx.stroke();
+      } else {
+        // Swept band from the slice-start position (outboard) to now.
+        const xo = x + Math.sign(tk.x - CX) * sweep;
+        ctx.fillStyle = bone((a * TICK_W) / (sweep + TICK_W));
+        ctx.fillRect(Math.min(x, xo) - TICK_W / 2, base - len, sweep + TICK_W, len);
+      }
     }
   }
 
@@ -480,24 +541,25 @@
       const age = t - ts;
       const p = ball(ts);
       if (p.bottom < 0) continue;
-      const a = 0.36 * Math.pow(1 - age / LIFE, 1.7) * fade;
+      const a = 0.5 * Math.pow(1 - age / LIFE, 1.7) * fade;
       if (a < 0.005) continue;
       ctx.globalAlpha = a;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 2.1, 0, TAU);
+      ctx.arc(p.x, p.y, 2.4, 0, TAU);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
 
-  // The typed seed line + signal-orange block cursor.
+  // The typed thesis line + signal-orange block cursor. Screen space (drawn outside the
+  // dolly): integer baseline and an integer glyph pitch keep the 24px caps razor sharp.
   let MONO_ADV = 0;
   function drawType(ctx, t) {
     if (t < CURSOR_IN - 0.001 || t > CURSOR_OUT[1]) return;
-    R.font(ctx, { family: 'JetBrains Mono', weight: 500, size: 20, spacing: 0, align: 'left' });
+    R.font(ctx, { family: 'JetBrains Mono', weight: 500, size: TEXT_SIZE, spacing: 0, align: 'left' });
     if (!MONO_ADV) MONO_ADV = ctx.measureText('M').width;
-    const pitch = MONO_ADV + 3; // letter-spacing 3px
-    const width = LINE.length * pitch - 3;
+    const pitch = Math.round(MONO_ADV + TEXT_TRACK);
+    const width = LINE.length * pitch - (pitch - MONO_ADV);
     const left = Math.round(CX - width / 2);
     let typed = 0;
     while (typed < LINE.length && TYPE_AT[typed] <= t) typed++;
@@ -507,7 +569,7 @@
     for (let i = 0; i < n; i++) {
       if (LINE[i] === ' ') continue;
       const fresh = 1 - seg(t - TYPE_AT[i], 0, 0.09); // new glyphs land a touch brighter
-      ctx.fillStyle = bone(0.8 + 0.2 * fresh);
+      ctx.fillStyle = bone(0.86 + 0.14 * fresh);
       ctx.fillText(LINE[i], left + i * pitch, TEXT_Y);
     }
     // Cursor: born with a pop on the beat, solid while typing, one idle blink, collapses.
@@ -516,21 +578,25 @@
     if (!vis) return;
     const pop = E.backOut(seg(t, CURSOR_IN, CURSOR_IN + 0.06), 2.2);
     const out = 1 - E.quadIn(seg(t, CURSOR_OUT[0], CURSOR_OUT[1]));
-    const cw = MONO_ADV * out, ch = 21 * pop;
+    const cw = Math.round(MONO_ADV) * out, ch = 25 * pop;
     if (cw < 0.2 || ch < 0.2) return;
     const cx = left + n * pitch;
     ctx.fillStyle = P.signal;
-    ctx.fillRect(cx, TEXT_Y + 4 - ch, cw, ch);
+    ctx.fillRect(cx, TEXT_Y + 5 - ch, cw, ch);
   }
 
   // Anticipation: halo tightening, speed lines streaming in, the floor's last point zipping up.
-  function drawInhale(ctx, t, b, detail) {
-    if (t < 1.56 || t >= CLEAN_T) return;
-    // Halo — a faint glow and a hairline ring that tighten onto the dot.
-    const hu = seg(t, 1.6, 1.805);
+  function drawInhale(ctx, t, b, detail, api) {
+    if (t < Math.min(STREAK0, HALO0) || t >= CLEAN_T) return;
+    // Halo — a faint glow and a hairline ring that tighten onto the dot. The ring closes at
+    // up to ~1500 px/s at the end, so it box-filters its radius across the shutter slice
+    // (one band from the slice-start radius to now) instead of strobing into rings.
+    const hu = seg(t, HALO0, HALO1);
     if (hu > 0 && hu < 1) {
       const env = Math.pow(Math.sin(Math.PI * hu), 0.8);
-      const r = lerp(180, RAD + 3, E.cubicIn(hu));
+      const ringR = (u) => lerp(180, RAD + 3, E.cubicIn(clamp(u)));
+      const r = ringR(hu);
+      const rPrev = ringR(seg(t - sliceDt(api), HALO0, HALO1));
       const glowR = lerp(96, RAD + 8, E.quadIn(hu));
       const g = ctx.createRadialGradient(b.x, b.y, RAD, b.x, b.y, glowR);
       g.addColorStop(0, bone(0.07 * env));
@@ -540,14 +606,17 @@
       ctx.beginPath();
       ctx.arc(b.x, b.y, glowR, 0, TAU);
       ctx.fill();
-      ctx.strokeStyle = bone(0.32 * env);
-      ctx.lineWidth = lerp(0.9, 1.5, hu);
+      const lw = lerp(0.9, 1.5, hu), sweep = Math.max(0, rPrev - r);
+      ctx.strokeStyle = bone((0.32 * env * lw) / (lw + sweep));
+      ctx.lineWidth = lw + sweep;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, r, 0, TAU);
+      ctx.arc(b.x, b.y, r + sweep / 2, 0, TAU);
       ctx.stroke();
     }
-    // Reverse speed lines.
+    // Reverse speed lines. The head's own sweep across the shutter slice becomes a short
+    // fade-out ahead of the peak (a box-filtered head), so fast heads never stutter.
     ctx.lineCap = 'round';
+    const sd = sliceDt(api);
     const n = Math.max(6, Math.round(STREAKS.length * Math.min(1, detail)));
     for (let i = 0; i < n; i++) {
       const s = STREAKS[i];
@@ -556,12 +625,17 @@
       const rAt = (v) => lerp(s.r0, RAD + 2, E.quadIn(clamp(v)));
       const rh = rAt(u), rt = rAt(u - STREAK_LAG);
       if (rt - rh < 0.5) continue;
+      const rhPrev = Math.min(rt, rAt(u - sd / s.dur));
       const cs = Math.cos(s.ang), sn = Math.sin(s.ang);
       const hx = b.x + cs * rh, hy = b.y + sn * rh, tx = b.x + cs * rt, ty = b.y + sn * rt;
       const a = s.a * clamp(u / 0.2);
       const g = ctx.createLinearGradient(tx, ty, hx, hy);
       g.addColorStop(0, bone(0));
-      g.addColorStop(1, bone(a));
+      const k = (rt - rhPrev) / (rt - rh);
+      if (rhPrev - rh > 1 && k > 0.05) {
+        g.addColorStop(k, bone(a * (1 - (0.5 * (rhPrev - rh)) / (rt - rh))));
+        g.addColorStop(1, bone(0));
+      } else g.addColorStop(1, bone(a));
       ctx.strokeStyle = g;
       ctx.lineWidth = s.w;
       ctx.beginPath();
@@ -571,11 +645,11 @@
     }
     // The collapsed floor's last point: flashes, then zips up and is absorbed by the dot.
     const ZIP_LAG = 0.4;
-    const zu = (t - 1.75) / 0.036;
-    if (t >= 1.745 && zu < 1 + ZIP_LAG) {
+    const zu = (t - ZIP0) / 0.036;
+    if (t >= ZIP0 - 0.005 && zu < 1 + ZIP_LAG) {
       const yAt = (v) => lerp(FLOOR_Y, b.bottom - 1, E.quadIn(clamp(v)));
       const hy = yAt(zu), ty = yAt(zu - ZIP_LAG);
-      const flash = 1 - seg(t, 1.752, 1.775);
+      const flash = 1 - seg(t, ZIP0 + 0.002, ZIP0 + 0.025);
       if (flash > 0) {
         ctx.fillStyle = bone(0.9 * flash);
         ctx.beginPath();
@@ -605,32 +679,39 @@
       const detail = api.detail ?? 1;
       const b = ball(t);
 
-      const cam = camScale(t);
-      if (cam !== 1) {
-        ctx.translate(CX, CY);
-        ctx.scale(cam, cam);
-        ctx.translate(-CX, -CY);
-      }
+      // Pin the contract: cancel the engine's (by now sub-pixel) hit shake before the cut.
+      R.unshake(ctx, api, smoothstep(1.79, 1.84, t));
 
       if (t < CLEAN_T) {
-        drawRipples(ctx, t);
-        drawFloor(ctx, t, b, detail);
-        drawTicks(ctx, t);
-        drawSpacing(ctx, t, detail);
+        withCamera(ctx, t, () => {
+          drawRipples(ctx, t, api);
+          drawFloor(ctx, t, b, detail);
+          drawTicks(ctx, t, api);
+          drawSpacing(ctx, t, detail);
+        });
         drawType(ctx, t);
       }
 
-      // Tension tremble (≤2px), cut to zero before the contract frames.
-      const trem = 1.9 * smoothstep(1.62, 1.72, t) * (1 - smoothstep(1.782, 1.806, t));
-      let jx = R.noise2(t * 52, 4.1), jy = R.noise2(9.3, t * 52);
-      const jl = Math.max(1, Math.hypot(jx, jy)); // clamp the vector, not the axes: ≤1.9px
-      jx *= trem / jl;
-      jy *= trem / jl;
+      // Tension tremble (≤2px), cut to zero before the contract frame. Sampled once per
+      // output frame (like the engine's shake): a shiver, not a smear of doubled rings.
+      const trem = 1.9 * smoothstep(1.673, 1.773, t) * (1 - smoothstep(TREM1 - 0.025, TREM1, t));
+      let jx = 0, jy = 0;
+      if (trem > 0) {
+        // Frame index of this sub-sample (its slices span +0 … +0.375 frames; +0.3 also
+        // absorbs frame times that arrive rounded down, e.g. 1.8333 for f110).
+        const tq = Math.floor(t * 60 + 0.3) / 60;
+        jx = R.noise2(tq * 52, 4.1);
+        jy = R.noise2(9.3, tq * 52);
+        const jl = Math.max(1, Math.hypot(jx, jy)); // clamp the vector, not the axes: ≤1.9px
+        jx *= trem / jl;
+        jy *= trem / jl;
+      }
       const bt = { x: b.x + jx, y: b.y + jy, bottom: b.bottom + jy };
 
-      drawInhale(ctx, t, bt, detail);
-
-      if (b.bottom > -2) drawDot(ctx, api, t, jx, jy);
+      withCamera(ctx, t, () => {
+        drawInhale(ctx, t, bt, detail, api);
+        if (b.bottom > -2) drawDot(ctx, api, t, jx, jy);
+      });
     },
   });
 

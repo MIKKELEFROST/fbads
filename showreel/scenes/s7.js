@@ -4,25 +4,30 @@
 // The signature end card: calm confidence after the storm. The protagonist dot
 // takes its final bow and becomes the full stop of the logotype.
 //
-//   0.000  CONTRACT   P.ink + bone dot r=28 at (960,540). Held (with the engine's hit
-//                     shake pinned) through frame 788 and its motion-blur sub-frames.
-//   0.015  FINAL HIT  the dot punches (1.85× pop, bloom) and fires ONE shockwave ring
-//                     with a brief pressure flash and an 8-stroke trim-path burst. As
-//                     the ring sweeps outward it "ignites" each contour of CLAUDE —
-//                     every outline trim-path grows both ways from the point the wave
-//                     touches first, so the word draws itself from the centre out.
+//   0.000  CONTRACT   P.ink + bone dot r=28 at (960,540) — the instant of the cut only.
+//          FINAL HIT  the pop starts ON the beat, so the first rendered frame (f788, lt
+//                     .0083–.0146 across its blur sub-frames) is already the impact: the
+//                     dot punches (1.85× pop, bloom) and fires ONE shockwave ring with a
+//                     brief pressure flash and an 8-stroke trim-path burst, and the
+//                     engine's hit shake + CA read on that same frame. As the ring sweeps
+//                     outward it "ignites" each contour of CLAUDE — every outline
+//                     trim-path grows both ways from the point the wave touches first,
+//                     so the word draws itself from the centre out.
 //   0.125  LAUNCH     anticipation crouch → the dot leaps up and over the word (x on
 //                     R.ease.snap, y a true ballistic arc) trailing a thin comet line…
 //   0.469  LAND       …and drops in as the period: keyed squash on the beat frame,
 //                     turns signal, the trail retracts into it, and the impact ripples
 //                     right→left through the word as a slanted fill wipe with a damped
 //                     follow-through dip per letter. Word complete ≈ .56.
-//   0.938  BEAT       the lockup re-centres upward; "Motion Designer" swings up word by
-//                     word from behind a mask (on the beat frame the first word breaks
-//                     the mask edge).
-//   1.406  STING      the period winks; a hairline draws out from centre to the
-//                     logotype's width; the mono line decodes L→R behind a block
-//                     cursor (resolved by ≈1.63 → >200 ms of readable rest).
+//   0.938  BEAT       the lockup re-centres upward in ONE glide to its final layout;
+//                     "Motion Designer" swings up word by word from behind a mask (on
+//                     the beat frame the first word breaks the mask edge).
+//   1.172  META       (beat + ⅛) as the role lands: a hairline draws out from centre to
+//                     the logotype's width and the mono line decodes L→R behind a block
+//                     cursor. Every glyph but the last is locked by 1.387.
+//   1.406  STING      the last glyph locks and the cursor vanishes ON the beat, the
+//                     period winks and sends a glint right→left along the hairline.
+//                     The card is complete from f872: 28 frames (467 ms) of rest.
 //   → 1.875 HOLD      slow push-in (1.00 → ~1.03) and a barely-there period breath.
 //                     No fade: the last frame is the clean end card.
 //
@@ -31,10 +36,12 @@
 //   r = 28 — the dot never changes size: it literally *is* the full stop.
 // · Tracking is hand-tuned per pair (optical, not metric) and the whole word,
 //   period included, is centred on its visual bounds.
-// · Fast movers (ring, burst, dot, wipe edge) box-filter themselves over one motion-
-//   blur sub-frame so the engine's 4-sample blur integrates instead of strobing.
-// · Contract frames pin the engine's hit shake AND hold the previous frame's hit CA,
-//   so the cut from s6 is pixel-identical apart from film grain.
+// · Fast movers (ring, burst, dot, wipe edge, glint) box-filter themselves over one
+//   motion-blur sub-frame (api.subDt) so the engine's blur integrates instead of
+//   strobing; the shockwave draws its exact swept coverage as a radial profile, so it
+//   smears into one band rather than stacking into concentric steps.
+// · Only the contract instant (lt ≤ 0, never a rendered frame) pins the engine shake;
+//   the final hit's shake and CA read in full. The sting's shake is softened.
 // · Every value is a pure function of lt; glyph data is built once in init().
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
@@ -47,18 +54,22 @@
 
   // ───────────────────────── timing (local seconds) ─────────────────────────
   const B1 = BEAT, B2 = BEAT * 2, B3 = BEAT * 3;   // .46875 · .9375 · 1.40625
-  // Frame 788 (t = 13.1333) is the first s7 frame; its last blur sub-frame is at
-  // lt = .01458. Everything before T_POP is the pure contract state.
-  const T_POP = 0.0147;
+  // The hit starts ON the beat. Frame 788 (t = 13.1333, lt .0083–.0146 over its blur
+  // sub-frames) is the first s7 frame, so it already carries the pop, ring and burst.
+  const T_POP = 0;
   const T_LAUNCH = 0.125;                          // dot leaves the ground
   const T_LAND = B1;                               // contact exactly on beat 1
+  const T_META = B2 + BEAT / 2;                    // 1.171875: hairline + mono decode start
+  const META_D = B3 - T_META;                      // hairline reaches full width on the sting
   const RING_D = 0.95;                             // shockwave expansion time
   const DRAW_D = 0.3;                              // per-contour trim-path duration
   const FILL_STAGGER = 0.013, FILL_D = 0.085;      // impact ripple through the letters
-  // The final render averages 4 point-sampled sub-frames over a 180° shutter. Anything
+  // The final render averages point-sampled sub-frames over a 180° shutter. Anything
   // that moves more than a few px per sub-frame strobes, so fast movers box-filter
-  // themselves over one sub-frame interval (ring, rays, dot, fill-wipe edge).
-  const SUB = 0.5 / 60 / 4;
+  // themselves over one sub-frame interval (ring, rays, dot, fill-wipe edge, glint). SUB
+  // is set from api.subDt on every render (the 4-sample interval when blur is off).
+  const SUB_DEF = 0.5 / 60 / 4;
+  let SUB = SUB_DEF;
 
   // ───────────────────────── layout (px) ─────────────────────────
   const CX = 960, CY = 540;
@@ -69,9 +80,9 @@
   const RULE_DY = 44;                              // serif baseline → hairline
   const MONO_DY = 38;                              // hairline → mono baseline
   const OPTICAL_Y = 534;                           // optical centre sits a touch above 540
-  // Vertical states of the lockup (cap-top y): logo alone → + role → + meta line.
-  const H_A = CAP, H_B = CAP + SERIF_DY, H_C = CAP + SERIF_DY + RULE_DY + MONO_DY;
-  const TOP_A = OPTICAL_Y - H_A / 2, TOP_B = OPTICAL_Y - H_B / 2, TOP_C = OPTICAL_Y - H_C / 2;
+  // Vertical states of the lockup (cap-top y): logo alone → full lockup (role + meta).
+  const H_A = CAP, H_C = CAP + SERIF_DY + RULE_DY + MONO_DY;
+  const TOP_A = OPTICAL_Y - H_A / 2, TOP_C = OPTICAL_Y - H_C / 2;
 
   // Optical pair tracking (px, added to the font's own kerning). Straight–straight
   // pairs keep the most air, the open L–A pair is left alone (it would collide).
@@ -148,12 +159,15 @@
     const monoAdv = m.measureText('M').width + 4;   // 4px letter-spacing, monospaced
     const monoW = MONO.length * monoAdv - 4;
 
-    // Per-character decode timing (deterministic).
+    // Per-character decode timing (deterministic; audio/synth.py s7_decode mirrors it).
+    // Every glyph but the last is locked by lt 1.387 (f871); the last one locks ON the
+    // sting beat, so the line — and the whole card — completes on the downbeat.
     const rnd = R.rng(707);
     const monoT = [...MONO].map((ch, i) => {
-      const appear = B3 + 0.012 + i * 0.0045 + rnd() * 0.006;
+      const appear = T_META + 0.012 + i * 0.0045 + rnd() * 0.006;
       return { ch, appear, settle: appear + 0.04 + rnd() * 0.045, seed: rnd() * 1000 };
     });
+    monoT[monoT.length - 1].settle = B3;
 
     const monoEnd = Math.max(...monoT.map((c) => c.settle));
 
@@ -171,10 +185,11 @@
   }
 
   // ───────────────────────── lockup vertical choreography ─────────────────────────
-  // Cap-top y of the logotype. Re-centres on the beat each time a line joins.
+  // Cap-top y of the logotype. One glide on beat 2 re-centres it for the full lockup
+  // (role + meta arrive a ⅛ note apart, so two stacked moves would stutter). Settled
+  // to < 0.3 px by the sting.
   const glide = E.bezier(0.25, 0.1, 0, 1);
-  const lockTop = (lt) =>
-    R.keys(lt, [[0, TOP_A], [B2 - 0.02, TOP_A], [B2 + 0.62, TOP_B, glide], [B3 - 0.02, TOP_B], [B3 + 0.62, TOP_C, glide]]);
+  const lockTop = (lt) => R.keys(lt, [[0, TOP_A], [B2 - 0.02, TOP_A], [B2 + 0.52, TOP_C, glide]]);
 
   // ───────────────────────── the dot ─────────────────────────
   // Flight: y is a true ballistic arc (apex above the caps) so the dot comes down with
@@ -351,12 +366,44 @@
   }
 
   // ───────────────────────── sting: hairline + decoded mono line ─────────────────────────
+  // The sting's accent on the finished card: as the period winks it sends a short light
+  // pulse right → left along the hairline (the same direction the landing rippled through
+  // the word). Fast off the mark, fading as it decelerates; gone by ≈ lt 1.60.
+  const GLINT_D = 0.3, GLINT_TAIL = 300;
+  function drawGlint(ctx, lt, G, yRule) {
+    const u = seg(lt, B3, B3 + GLINT_D);
+    if (u <= 0 || u >= 1) return;
+    const a = smoothstep(B3, B3 + 0.02, lt) * Math.pow(1 - u, 2.2);
+    if (a < 0.004) return;
+    const L = G.right - G.left, xl = CX - L / 2, xr = CX + L / 2;   // the rule's ends
+    const head = (tt) => xr - L * E.quartOut(seg(tt, B3, B3 + GLINT_D));
+    const xh = head(lt), xn = head(lt + SUB);          // swept over one sub-frame
+    const lead = 18 + (xh - xn);
+    const x0 = Math.max(xl, xn - 18), x1 = Math.min(xr, xh + GLINT_TAIL);
+    if (x1 <= x0) return;
+    const g = ctx.createLinearGradient(xh - lead, 0, xh + GLINT_TAIL, 0);
+    g.addColorStop(0, R.col.rgba(P.bone, 0));
+    g.addColorStop(lead / (lead + GLINT_TAIL), R.col.rgba(P.bone, 0.7 * a));
+    g.addColorStop(1, R.col.rgba(P.bone, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, yRule - 0.5, x1 - x0, 1);
+    // a faint halo so the pulse reads as light, not just a brighter line
+    const h = ctx.createLinearGradient(xh - lead, 0, xh + GLINT_TAIL * 0.5, 0);
+    h.addColorStop(0, R.col.rgba(P.bone, 0));
+    h.addColorStop(lead / (lead + GLINT_TAIL * 0.5), R.col.rgba(P.bone, 0.1 * a));
+    h.addColorStop(1, R.col.rgba(P.bone, 0));
+    ctx.fillStyle = h;
+    ctx.fillRect(x0, yRule - 2, Math.min(x1, xh + GLINT_TAIL * 0.5) - x0, 4);
+  }
+
   function drawMeta(ctx, lt, G, top) {
-    if (lt < B3) return;
+    if (lt < T_META) return;
     const yRule = top + CAP + SERIF_DY + RULE_DY;
-    const half = ((G.right - G.left) / 2) * E.expoOut(seg(lt, B3, B3 + 0.6));
+    // hairline: centre-out, lands at full width exactly on the sting
+    const half = ((G.right - G.left) / 2) * E.quartOut(seg(lt, T_META, T_META + META_D));
     ctx.fillStyle = R.col.rgba(P.bone, 0.3);
     ctx.fillRect(CX - half, yRule - 0.5, half * 2, 1);
+    drawGlint(ctx, lt, G, yRule);
 
     const yMono = yRule + MONO_DY;
     const x0 = CX - G.monoW / 2;
@@ -388,25 +435,46 @@
   // frames) plus a crisp burst of radial strokes that shoot out and are eaten
   // from the inside — trim-path style — all gone within ~⅓ s.
   const RAYS = 8;
+  // The ring moves up to ~130 px per frame, so each blur sub-sample draws its EXACT swept
+  // coverage over the sub-frame [r0, r1] as a radial-gradient profile: the pressure disc
+  // gets a linear edge ramp over r0 → r1, the ring band (width lw) becomes the trapezoid
+  // box(lw) ⊛ box(dr). Consecutive sub-samples then tile seamlessly into one smooth smear
+  // instead of stacking into concentric steps.
+  function sweptDisc(ctx, r0, r1, a) {
+    const g = ctx.createRadialGradient(CX, CY, 0, CX, CY, r1);
+    g.addColorStop(0, R.col.rgba(P.bone, a));
+    g.addColorStop(clamp(r0 / r1, 0, 1), R.col.rgba(P.bone, a));
+    g.addColorStop(1, R.col.rgba(P.bone, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(CX, CY, r1, 0, TAU);
+    ctx.fill();
+  }
+  function sweptRing(ctx, r0, r1, lw, a) {
+    const dr = Math.max(r1 - r0, 0.01);
+    const ri = Math.max(0, r0 - lw / 2), ro = r1 + lw / 2, span = ro - ri;
+    const m = Math.min(lw, dr), peak = a * (m / dr);
+    const k = clamp(m / span, 0, 0.5);
+    const g = ctx.createRadialGradient(CX, CY, ri, CX, CY, ro);
+    g.addColorStop(0, R.col.rgba(P.bone, 0));
+    g.addColorStop(k, R.col.rgba(P.bone, peak));
+    g.addColorStop(1 - k, R.col.rgba(P.bone, peak));
+    g.addColorStop(1, R.col.rgba(P.bone, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(CX, CY, ro, 0, TAU);
+    ctx.arc(CX, CY, ri, 0, TAU, true);
+    ctx.fill();
+  }
   function drawHit(ctx, lt) {
     if (lt < T_POP) return;
-    const r0 = ringR(lt), dr = ringR(lt + SUB) - r0, r = r0 + dr / 2;
+    const r0 = ringR(lt), r1 = ringR(lt + SUB);
     const u = seg(lt, T_POP, T_POP + 0.5);
     if (u < 1) {
       const fill = 0.1 * (1 - E.cubicOut(seg(lt, T_POP, T_POP + 0.14)));
-      if (fill > 0.002) {
-        ctx.fillStyle = R.col.rgba(P.bone, fill);
-        ctx.beginPath();
-        ctx.arc(CX, CY, r, 0, TAU);
-        ctx.fill();
-      }
-      // swept stroke: widen by the sub-frame travel, dim by the same ratio (energy kept)
+      if (fill > 0.002) sweptDisc(ctx, r0, Math.max(r1, r0 + 1), fill);
       const lw = lerp(16, 0.8, E.expoOut(seg(lt, T_POP, T_POP + 0.35)));
-      ctx.strokeStyle = R.col.rgba(P.bone, 0.95 * Math.pow(1 - u, 1.6) * (lw / (lw + dr)));
-      ctx.lineWidth = lw + dr;
-      ctx.beginPath();
-      ctx.arc(CX, CY, r, 0, TAU);
-      ctx.stroke();
+      sweptRing(ctx, r0, r1, lw, 0.95 * Math.pow(1 - u, 1.6));
     }
     // burst: 8 strokes on the diagonals (none lie along the word's horizontal band).
     // Head on expoOut, tail catches up on a cubic in-out → the stroke is gone in ~7 frames.
@@ -474,19 +542,21 @@
     init: async () => { build(); },
     render(ctx, lt, api) {
       const G = build();
-      // Contract frame pinned; the sting's shake is softened (the end card stays composed).
-      pinShake(ctx, api, lt < T_POP ? 1 : lt > B3 - 0.05 ? 0.6 : 0);
+      SUB = api.subDt > 0 ? api.subDt : SUB_DEF;
 
-      if (lt < T_POP) {
-        // The engine adds hit CA from the beat on; hold the previous frame's amount so
-        // the cut from s6 is pixel-identical (grain aside).
-        if (api.detail === 1 && api.post) api.post.ca = 0.9 * (R.impact(api.frameT - 1 / 60, 7) - R.impact(api.frameT, 7));
+      if (lt <= T_POP) {
+        // The contract instant itself (only reachable by scrubbing to exactly 13.125; no
+        // output frame or blur sub-frame lands here): the bare dot, shake pinned.
+        pinShake(ctx, api, 1);
         ctx.fillStyle = P.bone;
         ctx.beginPath();
         ctx.arc(CX, CY, DOT_R, 0, TAU);
         ctx.fill();
         return;
       }
+      // The final hit's shake and CA read in full from f788 on. On the sting the shake is
+      // softened: the finished end card stays composed.
+      pinShake(ctx, api, lt > B3 - 0.05 ? 0.6 : 0);
 
       // slow push-in, anchored at frame centre
       const push = 1 + 0.032 * E.quadOut(seg(lt, T_POP, 2.3));
@@ -503,8 +573,11 @@
       drawTrail(ctx, lt, G);
       drawDot(ctx, lt, G, top);
 
+      // Pop bloom for the smooth quarter-res glow: a hot kick on the impact frame that is
+      // gone before the word fills (no floor: the end card is crisp).
       if (api.detail === 1 && api.post) {
-        api.post.bloom = Math.max(api.post.bloom || 0, 0.6 * Math.exp(-(lt - T_POP) * 7) + 0.05);
+        const b = 0.5 * Math.exp(-(lt - T_POP) * 11);
+        if (b > 0.003) api.post.bloom = Math.max(api.post.bloom || 0, b);
       }
     },
   });
