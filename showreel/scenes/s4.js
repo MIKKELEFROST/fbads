@@ -639,10 +639,12 @@
   R.scene({
     id: 's4',
     shake: 0.8,
-    // Line work and rings can't self-blur like the particles do (they size their streaks by
-    // api.subDt), so the fastest stretches get more sub-samples: the burst frames (f450–452), the
-    // tunnel curl (row ends sweep ~30 px per sub-sample at 4) and the late drain.
-    samplesAt: (lt) => (lt < 0.045 ? 16 : lt > 1.31 && lt < 1.52 ? 16 : lt > 1.69 && lt < 1.82 ? 12 : 4),
+    // Line work can't self-blur like the particles do (they size their streaks by api.subDt), so
+    // where it moves fast it gets more sub-samples: the burst frames (f450–452), the travelling
+    // ridges (4 samples strobe into hard copies), the tunnel curl (row ends sweep ~30 px per
+    // sub-sample at 4) and the late drain. Per-frame cost is about half of cut 1's, so the total
+    // render time for this window stays about the same.
+    samplesAt: (lt) => (lt < 0.045 ? 16 : lt < 0.9 ? 4 : lt < 1.31 ? 8 : lt < 1.52 ? 16 : lt < 1.69 ? 8 : lt < 1.82 ? 12 : 4),
     render(ctx, lt, api) {
       const detail = api.detail ?? 1;
       const t = lt;
