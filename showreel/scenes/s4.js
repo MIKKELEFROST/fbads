@@ -415,21 +415,15 @@
   const ORDER = new Uint16Array(N), ROWIDX = new Uint16Array(COLS);
 
   // ═════════════════════════════ drawing helpers ═════════════════════════════
-  // Background glow: ink → ink2 at the centre. It is added LAST with 'lighter' (adding ink2 − ink),
-  // which is identical to painting it underneath, but lets the ridge occluders be plain ink.
-  const GLOW_ADD = 'rgba(' + R.col.rgb(P.ink2).map((v, j) => v - R.col.rgb(P.ink)[j]).join(',');
-  function drawGlow(ctx, a) {
-    if (a <= 0.002) return;
+  // Background: ink with a breathing ink2 glow at the centre, as an OPAQUE gradient (the stops
+  // are pre-mixed), so the ridge occluders fill with the very same paint in a single pass.
+  // (Not a 'lighter' overlay: on this GPU path that composite reads back a stale destination.)
+  function glowGradient(ctx, a) {
     const g = ctx.createRadialGradient(CX, CY - 40, 0, CX, CY - 40, 900);
-    g.addColorStop(0, GLOW_ADD + ',' + a.toFixed(4) + ')');
-    g.addColorStop(0.55, GLOW_ADD + ',' + (a * 0.45).toFixed(4) + ')');
-    g.addColorStop(1, GLOW_ADD + ',0)');
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = g;
-    ctx.fillRect(-200, -200, W + 400, H + 400);
-    ctx.restore();
+    g.addColorStop(0, R.col.mix(P.ink, P.ink2, a));
+    g.addColorStop(0.55, R.col.mix(P.ink, P.ink2, a * 0.45));
+    g.addColorStop(1, P.ink);
+    return g;
   }
 
   // Projected ring on the sphere/torus equator (object space), for the burst shockwave.
@@ -674,6 +668,8 @@
 
       // ── background glow + far dust ─────────────────────────────────────────
       const glowA = smoothstep(0, 0.32, t) * (1 - smoothstep(1.62, 1.8, t));
+      const bgPaint = glowA > 0.002 ? glowGradient(ctx, 0.9 * glowA) : P.ink;
+      if (glowA > 0.002) { ctx.globalAlpha = 1; ctx.fillStyle = bgPaint; ctx.fillRect(-200, -200, W + 400, H + 400); }
       const atmoA = smoothstep(0.04, 0.3, t) * (1 - smoothstep(1.5, 1.68, t));
       drawDust(ctx, g, atmoA, detail >= 0.99 ? 1 : 1.6);
 
@@ -852,7 +848,7 @@
             ctx.closePath();
           }
           ctx.globalAlpha = occA;
-          ctx.fillStyle = P.ink; ctx.fill('evenodd');
+          ctx.fillStyle = bgPaint; ctx.fill('evenodd');
         };
 
         for (let i = 0; i < N; i++) prep(i);
@@ -878,8 +874,6 @@
 
         if (detail >= 0.6) drawCallouts(ctx, t, api, g);
       }
-
-      drawGlow(ctx, 0.9 * glowA);
 
       // ── the signal dot: accretes as the rings land, pops on the last one, settles to r=14 ──
       if (t >= T_DOT0) {
