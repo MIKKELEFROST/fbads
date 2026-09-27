@@ -1133,7 +1133,12 @@
     bar.innerHTML = `<button>❚❚</button><input type="range" min="0" max="${DUR}" step="0.001" value="0"><span>0.00</span>`;
     document.body.appendChild(bar);
     const [btn, range, label] = bar.children;
-    const audio = new Audio('../out/soundtrack.wav');
+    // the language's own mix (with voice-over) if it has been made, else the music on its own
+    const audio = new Audio(`../out/soundtrack-${CFG.lang}.wav`);
+    audio.addEventListener('error', () => {
+      audio.src = '../out/soundtrack.wav';
+      if (playing) { audio.currentTime = now(); audio.play().catch(() => {}); }
+    }, { once: true });
     let playing = true, t0 = performance.now(), tPaused = 0;
     const now = () => (playing ? ((performance.now() - t0) / 1000) % DUR : tPaused);
     btn.onclick = () => {

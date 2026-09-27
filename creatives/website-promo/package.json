@@ -1,12 +1,13 @@
 {
   "name": "website-promo",
   "private": true,
-  "description": "Motion graphic ad (16.9 s, Danish + English) for a company that builds websites for service businesses",
+  "description": "Motion graphic ad (16.9 s, Danish with voice-over + English) for a company that builds websites for service businesses",
   "type": "module",
   "scripts": {
-    "audio": "python3 tools/make_audio.py",
+    "audio": "python3 tools/make_audio.py && python3 tools/make_audio.py --vo=vo/da",
     "render": "node tools/render.mjs",
     "render:portrait": "node tools/render.mjs --format=portrait",
+    "remux": "node tools/render.mjs --remux && node tools/render.mjs --remux --format=portrait",
     "render:en": "node tools/render.mjs --lang=en && node tools/render.mjs --lang=en --format=portrait",
     "posters": "node tools/render.mjs --poster && node tools/render.mjs --poster --format=portrait",
     "stills": "node tools/render.mjs --stills=0.3,1.2,2.6,4.6,6.2,8.3,10.5,12.6,15.6",
