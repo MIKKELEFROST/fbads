@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Claude — Motion Reel 2026</title>
+<style>
+  html, body { margin: 0; background: #0B0B0E; color: #F2EDE4; font: 14px "JetBrains Mono", monospace; }
+  #out { display: block; width: 100vw; max-width: 1920px; aspect-ratio: 16 / 9; }
+  #bar { padding: 8px 12px; opacity: .7; }
+</style>
+</head>
+<body>
+<canvas id="out" width="1920" height="1080"></canvas>
+<div id="bar">space: play/pause · ←/→: step · shift+←/→: beat</div>
+<script src="vendor/opentype.min.js"></script>
+<script src="lib/timeline.js"></script>
+<script src="lib/core.js"></script>
+<script src="lib/engine.js"></script>
+<script src="scenes/s1.js"></script>
+<script src="scenes/s2.js"></script>
+<script src="scenes/s3.js"></script>
+<script src="scenes/s4.js"></script>
+<script src="scenes/s5.js"></script>
+<script src="scenes/s6.js"></script>
+<script src="scenes/s7.js"></script>
+<script src="scenes/hud.js"></script>
+<script>
+  // Interactive preview when opened in a browser (the offline renderer calls R.frame directly).
+  (async () => {
+    await R.ready;
+    if (new URLSearchParams(location.search).has('headless')) return;
+    const out = document.getElementById('out').getContext('2d');
+    let t = 0, playing = true, last = performance.now();
+    const draw = () => out.drawImage(R.frame(t), 0, 0);
+    addEventListener('keydown', (e) => {
+      if (e.code === 'Space') playing = !playing;
+      const step = e.shiftKey ? R.BEAT : 1 / R.FPS;
+      if (e.code === 'ArrowRight') t = Math.min(R.DURATION - 1e-6, t + step);
+      if (e.code === 'ArrowLeft') t = Math.max(0, t - step);
+      draw();
+    });
+    const loop = (now) => {
+      if (playing) { t = (t + (now - last) / 1000) % R.DURATION; draw(); }
+      last = now;
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  })();
+</script>
+</body>
+</html>
