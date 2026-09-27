@@ -4,6 +4,13 @@ A 15-second, 1920×1080, 60 fps motion-design showreel, built entirely in code: 
 pure function of time, rendered offline by a small custom engine (Canvas2D + WebGL) and scored with
 a fully synthesized soundtrack locked to the same 128 BPM grid.
 
+**The film: [`reel.mp4`](reel.mp4)** (H.264 + AAC, 900 frames, −14 LUFS). Poster frame: [`poster.png`](poster.png).
+
+Seven scenes, one protagonist (the dot): ignition (squash & stretch on the beat) → kinetic type
+(six words, six techniques, a zoom through the O) → shape language (morphs + a live graph editor) →
+depth (particles, terrain, tunnel) → liquid (a refracting GLSL metaball shader) → multiverse (the
+reel replays itself in a 16-panel grid) → lockup (`CLAUDE.`, where the dot lands as the full stop).
+
 - `DIRECTION.md`: creative direction, scene contracts, and the engine API
 - `lib/`: timeline (tempo, scenes, hit points, palette), core toolkit (easing, springs, keyframes,
   noise, glyph outlines, shape morphing, 3D), and the engine (compositor, motion blur, shaders, post)
