@@ -222,7 +222,8 @@ def render_png(x, hits, onsets, out):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    argv = sys.argv[1:]
+    args = [a for i, a in enumerate(argv) if not a.startswith('--') and (i == 0 or argv[i - 1] != '--png')]
     path = args[0] if args else os.path.join(HERE, 'reel.wav')
     out = sys.argv[sys.argv.index('--png') + 1] if '--png' in sys.argv else '/tmp/audio-work'
     os.makedirs(out, exist_ok=True)
@@ -271,9 +272,14 @@ def main():
         bl -= bl[5]
         mm = mom[s0:max(s0 + 1, s1 - W4)].max()
         print(f'  {name:14s} {ls:6.1f}  {mm:6.1f}  {pk:5.1f}  {cc:5.2f}  {cl:5.2f}   {ch_:5.2f}    ' + ' '.join(f'{v:+4.0f}' for v in bl))
-    for tag, a, b_ in (('gap 12.94–13.12', 12.94, 13.12), ('last 0.05 s', 14.95, 15.0), ('first 0.05 s', 0, 0.05)):
+    rms_all = 20 * np.log10(np.sqrt(np.mean(x ** 2)) + 1e-12)
+    # the tension gap holds only the implosion's reverse-suck (spec: ≤ −24 dB under the mix), and
+    # the clean-dot frames right before the final hit must be silent (dither floor ≈ −96 dBFS)
+    for tag, a, b_ in (('gap suck 12.94–13.098', 12.94, 13.098), ('clean dot 13.10–13.12', 13.10, 13.12),
+                       ('last 0.05 s', 14.95, 15.0), ('first 0.05 s', 0, 0.05)):
         s0, s1 = int(a * SR), int(b_ * SR)
-        print(f'  {tag:20s} RMS {20 * np.log10(np.sqrt(np.mean(x[:, s0:s1] ** 2)) + 1e-12):7.1f} dBFS')
+        r = 20 * np.log10(np.sqrt(np.mean(x[:, s0:s1] ** 2)) + 1e-12)
+        print(f'  {tag:22s} RMS {r:7.1f} dBFS  ({r - rms_all:+.1f} dB vs mix RMS)')
     print(f'  last sample: L {x[0, -1]:+.6f} R {x[1, -1]:+.6f}')
 
     sk = spikes(x)

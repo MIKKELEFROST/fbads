@@ -35,8 +35,10 @@
 #
 #  A few picture-sync details mirror the scene files exactly (their seeded schedules are
 #  re-derived here with a port of R.rng / mulberry32): the typed line and its backspace run
-#  in s1, the ruler ticks popping out from the centre, the TIMING letters landing on 32nds and
-#  the "is" tittle in s2, the dot accreting in s4, and the mono line decoding in s7.
+#  in s1, the ruler ticks popping out from the centre, the TIMING letters landing on 32nd-note
+#  triplets and the "is" tittle in s2, the drain and the dot pop in s4, and the mono line
+#  decoding in s7. Staging moves (glides, camera punches, the ruler retract) get envelopes
+#  shaped by the velocity of the scene's own easing curve (bezier_ease, a port of R.ease.bezier).
 # ═════════════════════════════════════════════════════════════════════════════════════════════
 import os
 import sys
@@ -97,6 +99,20 @@ def smoothstep(a, c, x):
 def on_frame(t):
     """First 60 fps frame time that shows an event scheduled at t (picture-side quantisation)."""
     return np.ceil(t * FPS - 1e-9) / FPS
+
+
+def bezier_ease(x1, y1, x2, y2):
+    """Vectorised CSS cubic-bezier (R.ease.bezier): u ∈ 0..1 (array) → eased value."""
+    s = np.linspace(0.0, 1.0, 4097)
+    bx = ((1 - 3 * x2 + 3 * x1) * s + (3 * x2 - 6 * x1)) * s * s + 3 * x1 * s
+    by = ((1 - 3 * y2 + 3 * y1) * s + (3 * y2 - 6 * y1)) * s * s + 3 * y1 * s
+    return lambda u: np.interp(np.clip(u, 0.0, 1.0), bx, by)
+
+
+def ease_speed(ease, n):
+    """|d ease / du| sampled on n points over u ∈ 0..1, normalised to a peak of 1 (motion → level)."""
+    v = np.abs(np.gradient(ease(np.linspace(0.0, 1.0, n))))
+    return v / max(v.max(), 1e-12)
 
 
 # Accent map — mirrors R.HITS in lib/timeline.js (beat, strength, kind). analyze.py re-parses
@@ -371,6 +387,13 @@ def reverse_swell(dur, key, f=2800.0, bright=1.0, ir=None):
     return fade(norm(wet), smp(0.02), smp(0.0025))
 
 
+def trim_tail(x, thr=1e-3, fout=0.004):
+    """Drop a reverse swell's trailing silence (the reversed pre-delay, ≈25 ms), so add_end puts
+    the swell's REAL end — not its padding — where it's placed."""
+    live = np.flatnonzero(np.max(np.abs(x), axis=0) > thr * np.max(np.abs(x)))
+    return fade(x[:, :live[-1] + 1], 0, smp(fout))
+
+
 # ═════════════════════════════════════════ MIXER ════════════════════════════════════════════
 # bus: (high-pass Hz or None, sidechain depth, sidechain hold s, sidechain release s, fader dB)
 BUSES = {
@@ -383,6 +406,7 @@ BUSES = {
     'music': (120.0, 0.35, 0.010, 0.12, 2.0),
     'pad':   (150.0, 0.62, 0.020, 0.26, 0.0),
     'fx':    (120.0, 0.25, 0.010, 0.15, 1.0),
+    'air':   (150.0, 0.00, 0.000, 0.00, 0.0),     # the only thing allowed inside the tension gap
     'verb':  (180.0, 0.50, 0.020, 0.22, 0.0),
 }
 BED = ('sub', 'bass', 'drums', 'music', 'pad', 'fx', 'verb')      # what a "suck" pulls down
@@ -440,13 +464,16 @@ class Mix:
             self.auto[k][a:h] *= down
             self.auto[k][h:h + nb] *= up
 
-    def gap(self, t0, t1, fall=0.012):
-        """Tension gap: EVERYTHING drops out over [t0, t1); the bed eases back after t1."""
+    def gap(self, t0, t1, fall=0.012, keep=()):
+        """Tension gap: EVERYTHING (but the `keep` buses) drops out over [t0, t1); the bed eases
+        back after t1."""
         a, f, h = smp(t0), smp(t0 + fall), smp(t1)
         down = 0.5 + 0.5 * np.cos(np.pi * np.arange(f - a) / (f - a))
         nb = smp(0.008)
         up = 0.5 - 0.5 * np.cos(np.pi * np.arange(nb) / nb)
         for k in BUSES:
+            if k in keep:
+                continue
             self.auto[k][a:f] *= down
             self.auto[k][f:h] = 0.0
             if k in BED:
@@ -747,6 +774,22 @@ def grain(f, dur):
     return fade((np.sin(TAU * f * t) + 0.25 * np.sin(TAU * 2.01 * f * t) * w) * w, 2, 16)
 
 
+def sparkle(key, pings=3):
+    """Field-dot glint: a few tiny high sine pings (hard attack, ~35 ms decay — the dots' own
+    e^(−24·t) flare), the first ON the event, the rest scattered over 8 ms and across the field."""
+    n = nsamp(0.14)
+    g = rng('sparkle', key)
+    penta = [nm(s) for s in ('F7', 'Ab7', 'Bb7', 'C8', 'Eb8')]
+    out = np.zeros((2, n))
+    for i in range(pings):
+        a = smp(g.uniform(0.002, 0.008)) if i else 0
+        tt = taxis(n - a)
+        f = hz(penta[g.integers(len(penta))]) * g.uniform(0.998, 1.002)
+        x = np.sin(TAU * f * tt) * smoothstep(0, 0.0006, tt) * np.exp(-tt / g.uniform(0.025, 0.045))
+        out[:, a:] += pan2(x, g.uniform(-0.8, 0.8)) * (1.0 if i == 0 else g.uniform(0.45, 0.8))
+    return fade(norm(out), 2, 480)
+
+
 def bubble(f, dur=0.11, key=0):
     """Bubbly FM blip: pitch rises into the note (a bubble resonance), 1:2 FM that closes fast."""
     n = nsamp(dur)
@@ -940,6 +983,10 @@ def ignition(mix, kit):
     x = tvfilt(x, 'lp', 170 * (1 + 3.2 * smoothstep(0.2, 1.85, t) ** 2), 0.9)
     mix.add('bass', fade(x * smoothstep(0.0, 1.1, t), 0, 480), 0.0, -27)
 
+    # The floor's seed dot pops (s1 SEED_T .008 → first seen on f1): a tiny pip on the F pedal.
+    mix.add('music', pop(2300, hz(nm('F6')), 0.1, 0.004, 0.022, 'seed', 0.12), on_frame(S1_SEED_T), -31,
+            room=0.2, hall=0.08)
+
     # The ruler unrolls: ticks pop out from the centre (s1 TICKS[].tPop), pairs spreading L/R.
     for ak in range(17):
         tp = on_frame(0.075 + 0.23 * (ak / 16) ** 0.92)
@@ -974,20 +1021,52 @@ def ignition(mix, kit):
     for i, (ch, ta) in enumerate(zip(LINE, TYPE_AT)):
         kind = 'space' if ch == ' ' else 'key'
         tq = on_frame(ta)
-        if any(-0.012 < tq - b(n_) < 0.006 for n_ in (1, 2, 3)):
-            continue                      # a key that lands on a bounce would flam it — the bloop covers it
+        if any(abs(tq - b(n_)) < 1.0 / FPS for n_ in (1, 2, 3)):
+            continue                      # a key shown within a frame of a bounce would flam it — the bloop covers it
         mix.add('drums', keyclick(('type', i), kind), tq, -23 if kind == 'key' else -21,
                 pan=-0.35 + 0.7 * i / len(LINE), room=0.12)
     for j, td in enumerate(DEL_AT):
         x = keyclick(('del', j), 'del' if j else 'key')
         x = filt(x, 'lp', 7000 - 110 * j, 0.7)
-        mix.add('drums', fade(x, 2, 96), td, -24 if j == 0 else -30 - 0.1 * j, pan=0.35 - 0.7 * j / len(LINE))
+        # the single tap lands on the frame that shows it; the auto-repeat (5.6 ms apart, faster
+        # than the frame rate) stays a continuous ratchet
+        mix.add('drums', fade(x, 2, 96), on_frame(td) if j == 0 else td, -24 if j == 0 else -30 - 0.1 * j,
+                pan=0.35 - 0.7 * j / len(LINE))
+
+    # Tape-measure retract (s1 RETRACT0 → RETRACT1): both halves of the ruler whip into the centre
+    # on a backIn(0.9) — a hair of anticipation, then accelerating. Since the polish its fast part
+    # comes AFTER the backspace ratchet, so it gets its own swish: two sides closing on the centre,
+    # level following the curve's speed, a ratchet flutter for the ticks rushing past.
+    d = S1_RETRACT1 - S1_RETRACT0
+    u = np.linspace(0.0, 1.0, nsamp(d))
+    sp = np.maximum(0.0, 3 * 1.9 * u * u - 2 * 0.9 * u)
+    sp /= sp.max()
+    for side in (-1, 1):
+        w = whoosh(d, 700, 5200, 1.1, 0.0, (0.9 * side, 0.0), ('retract', side), 0.25, flutter=0.35)
+        mix.add_end('fx', fade(w * sp ** 0.9, 8, smp(0.006)), S1_RETRACT1, -25)
+    # ... and the floor's last point flashes and zips up into the dot (ZIP0, 36 ms quadIn). The flash
+    # is lit from ZIP0 − 5 ms, so f108 (1.800) is the first frame that shows it.
+    n = nsamp(0.036 + 0.012)
+    t = taxis(n)
+    q = np.clip(t / 0.036, 0.0, 1.0)
+    zp = np.sin(TAU * phase(1100 * (4600 / 1100) ** (q * q))) * smoothstep(0, 0.0015, t)
+    zp *= (0.55 + 0.45 * q) * (1 - smoothstep(0.036, 0.048, t))
+    zp += filt(noise(n, 'zipflash'), 'hp', 4000) * np.exp(-t / 0.0012) * 0.3     # the flash
+    mix.add('fx', fade(norm(zp), 3, 96), on_frame(S1_ZIP0 - 0.005), -27, room=0.1)
 
     # The inhale: riser (noise sweep + rising F-C-F) + reverse cymbal, from contact 3 into the drop.
     r = riser(T_DROP - b(3), chord('F3', 'C4', 'F4'), 12, 300, 9500, 'intro', (6, 32))
     mix.add_end('fx', r, T_DROP, -3, hall=0.12)
     mix.add_end('fx', reverse_cymbal(0.62, 'intro'), T_DROP, -7)
     mix.suck(T_DROP, 0.04)
+
+
+# scenes/s1.js constants mirrored here
+S1_SEED_T = 0.008                            # the floor's seed dot pops
+S1_TYPE_T0, S1_TYPE_T1 = 0.5, 1.12           # typing span
+S1_DEL_T0, S1_DEL_REPEAT, S1_DEL_T1 = 1.56, 1.58, 1.73   # backspace: tap, then auto-repeat
+S1_RETRACT0, S1_RETRACT1 = 1.613, 1.808      # ruler retract
+S1_ZIP0 = 1.803                              # the floor's last point flashes and zips up
 
 
 def s1_typing():
@@ -1003,10 +1082,11 @@ def s1_typing():
             g += 0.8
         gaps.append(g)
     s = sum(gaps)
-    at = [0.5]
+    at = [S1_TYPE_T0]
     for g in gaps:
-        at.append(at[-1] + g / s * 0.8)
-    dl = [1.5 if j == 0 else 1.555 + (j - 1) / (len(LINE) - 2) * (1.722 - 1.555) for j in range(len(LINE))]
+        at.append(at[-1] + g / s * (S1_TYPE_T1 - S1_TYPE_T0))
+    dl = [S1_DEL_T0 if j == 0 else S1_DEL_REPEAT + (j - 1) / (len(LINE) - 2) * (S1_DEL_T1 - S1_DEL_REPEAT)
+          for j in range(len(LINE))]
     return LINE, at, dl
 
 
@@ -1015,7 +1095,7 @@ FM9 = chord('F3', 'Ab3', 'C4', 'Eb4', 'G4', 'C5')
 SLAMS = [  # beat, chord (bass root first), whoosh (dur, f0, f1, q, shape, pan, body, flutter), dB
     (5, chord('F3', 'F4', 'Ab4', 'C5'), (0.12, 2600, 9500, 2.0, 3.0, (-0.7, 0.3), 0.15, 0.0), -7.0),    # is  (blade)
     (6, chord('Db3', 'F4', 'Ab4', 'C5'), (0.12, 600, 5000, 1.2, 2.4, (0.6, -0.2), 0.35, 0.0), -7.0),    # RHYTHM
-    (7, chord('Eb3', 'G4', 'Bb4', 'Eb5'), (0.16, 400, 6000, 1.1, 2.6, (-0.8, 0.8), 0.35, 0.0), -7.0),   # TIMING (wipe)
+    (7, chord('Eb3', 'G4', 'Bb4', 'Eb5'), (0.12, 400, 6000, 1.1, 2.6, (-0.8, 0.8), 0.35, 0.0), -7.0),   # TIMING (wipe 3.161→b7, cubicIn)
     (8, chord('Ab3', 'C5', 'Eb5', 'G5'), (0.14, 200, 2600, 0.8, 2.2, (0.0, 0.0), 0.8, 0.0), -6.0),      # &  (iris)
     (9, chord('Bb3', 'Ab4', 'C5', 'Db5', 'F5'), (0.12, 500, 4200, 1.2, 2.4, (0.5, -0.5), 0.35, 0.6), -7.0),  # FLOW (wave)
 ]
@@ -1066,10 +1146,11 @@ def kinetic(mix, kit):
         mix.suck(b(n), 0.012, 0.25, buses=('fx',), back=0.004)     # the whoosh tucks under the slam
         mix.add('hits', stab(notes, 0.36, ('slam', n), 1.0 + 0.1 * (n - 5), tick=0.4), b(n), d, room=0.25, hall=0.12)
 
-    # TIMING: letters land on consecutive 32nds → tuned ticks walking up the Eb pentatonic, L → R.
+    # TIMING: letters land on consecutive 32nd-note triplets (s2 LAND_STEP = BEAT/12) → tuned
+    # ticks walking up the Eb pentatonic, L → R.
     for i, m in enumerate(('Eb5', 'F5', 'G5', 'Bb5', 'C6', 'Eb6')):
         tk = pluck(hz(nm(m)), 0.16, 0.05, ('tim', i), hf=1.2)
-        mix.add('music', tk, b(7) + i * S32, -16 + 0.6 * i, pan=-0.6 + 0.24 * i, room=0.2, dly=0.12)
+        mix.add('music', tk, b(7) + i * BEAT / 12, -16 + 0.6 * i, pan=-0.6 + 0.24 * i, room=0.2, dly=0.12)
     # "is": the tittle drops in on the off-beat 8th.
     mix.add('music', pop(2600, hz(nm('C6')), 0.14, 0.004, 0.03, 'tittle', 0.3), b(5) + S8, -19, pan=0.1, room=0.2)
     # "&": the fill snaps on the off-beat 8th.
@@ -1083,10 +1164,19 @@ def kinetic(mix, kit):
     tz = taxis(nz)
     rise = np.sin(TAU * phase(180 * (1400 / 180) ** ((tz / d) ** 2))) * (tz / d) ** 3
     mix.add_end('fx', fade(rise, 8, smp(0.002)), b(10), -21)
-    mix.suck(b(10), 0.014, 0.12, buses=('fx',), back=0.004)   # a breath of air before the pass-through
+    # a breath of air before the pass-through. It opens 6 ms before the counter swallows the frame
+    # (s2 COVER 4.6795) — deliberately not later: a shorter breath leaves more whoosh in front of
+    # b10, the reel's lowest-contrast onset.
+    mix.suck(b(10), 0.014, 0.12, buses=('fx',), back=0.004)
 
 
 # ─────────────────────────────────── 4.6875 – 7.5  SHAPE LANGUAGE ────────────────────────────
+S3_SWAP = (0.69, 0.935)                    # s3 SWAP: hero glide X_L → X_R (local s)
+S3_M4 = (4 * BEAT - 0.02, 4 * BEAT + 0.34)  # s3 MORPHS[3]: back curve, glide home + pull-out
+SNAP = bezier_ease(0.7, 0, 0.2, 1)          # R.ease.snap
+BACK = bezier_ease(0.34, 1.56, 0.64, 1)     # the M4 back curve
+
+
 def shape(mix, kit):
     T0 = b(10)
     # Portal arrival: the long drop kick (its own sub boom) + a bright bloom + a membrane pop,
@@ -1122,8 +1212,40 @@ def shape(mix, kit):
     mix.add('hits', pop(2000, hz(nm('F5')), 0.16, 0.005, 0.04, 'm5', 0.3), b(15), -10, room=0.2)                   # recall
     mix.add('music', bell(hz(nm('Eb6')), 0.9, 'recall', 0.6), b(15), -22, hall=0.4)
 
-    # RECALL: the field is sucked home into the dot — reverse swell + rising sweep into 7.5.
-    mix.add_end('fx', reverse_swell(b(16) - b(15) - 0.02, 'shape', 3200), b(16) - 0.012, -6)
+    # Staging (soft, and nothing leads INTO a hit, so the morph onsets stay clean).
+    # Off-beat 8ths (s3 OFF): a scattered subset of the field flares → a glint over the open hat.
+    for k in range(5):
+        mix.add('fx', sparkle(('off', k)), T0 + (k + 0.5) * BEAT, -31, hall=0.12)
+    # SWAP: the hero glides X_L → X_R on R.ease.snap (fastest ≈5.49) while the right editor folds
+    # and the left one unfolds — an air glide whose level and brightness follow the glide's speed.
+    g0, g1 = T0 + S3_SWAP[0], T0 + S3_SWAP[1]
+    n = nsamp(g1 - g0)
+    u = np.linspace(0.0, 1.0, n)
+    sp = ease_speed(SNAP, n)
+    x = tvfilt(noise(n, 'glide'), 'bp', 380 + 2400 * sp, 0.9) + 0.35 * tvfilt(noise(n, 'glide2'), 'lp', 300 + 900 * sp, 0.7)
+    mix.add('fx', pan2(fade(norm(x * sp ** 1.2), 8, 96), -0.3 + 0.6 * SNAP(u)), g0, -25, hall=0.12)
+    # M3: the whip curve drives a camera punch-in (zoom speed peaks ON B13, the kick overshoot
+    # peaks ≈6.15) — an air push that starts on the beat and is spent by that peak.
+    n = nsamp(0.16)
+    t = taxis(n)
+    ps = tvfilt(noise(n, 'punch'), 'lp', 260 + 2400 * np.exp(-t / 0.028), 0.8)
+    mix.add('hits', fade(norm(ps * smoothstep(0, 0.003, t) * np.exp(-t / 0.04)), 2, 480), b(13), -19, room=0.2)
+    # M4: the back curve (starting 20 ms before B14) glides the hero home to centre and pulls the
+    # camera out — fast out of the beat, so a falling swish from the right, started ON the beat
+    # (the first 20 ms of motion sit under the bloop).
+    m0, m1 = T0 + S3_M4[0], T0 + S3_M4[1]
+    n = nsamp(m1 - b(14))
+    sp = ease_speed(BACK, nsamp(m1 - m0))[-n:]
+    uf = np.linspace(0.0, 1.0, nsamp(m1 - m0))[-n:]            # curve progress, B14 → end
+    u = np.linspace(0.0, 1.0, n)
+    x = tvfilt(noise(n, 'm4glide'), 'bp', 3000 * (450 / 3000) ** u, 0.8) * sp * smoothstep(0, 0.004, taxis(n))
+    mix.add('fx', pan2(fade(norm(x), 4, 480), 0.3 * (1 - np.clip(BACK(uf), 0.0, 1.0))), b(14), -17, hall=0.12)
+
+    # RECALL: the field is sucked home into the dot — reverse swell + rising sweep into 7.5. The
+    # hero implodes 7.3075 → 7.4725 (s3 COL.shrink0 → HOLD_T): the swell (its padding trimmed, so
+    # it really ends at 7.488) and the sweep run through the landing, and the 30 ms suck from 7.47
+    # is the one-frame hold on the contract dot before the cut.
+    mix.add_end('fx', trim_tail(reverse_swell(b(16) - b(15) - 0.02, 'shape', 3200)), b(16) - 0.012, -6)
     mix.add_end('fx', whoosh(0.3, 900, 7000, 1.4, 3.5, (0.4, 0.0), 'recall', 0.2), b(16), -14)
     mix.suck(b(16), 0.03, 0.05)
 
@@ -1131,6 +1253,10 @@ def shape(mix, kit):
 # ────────────────────────────────────── 7.5 – 9.375  DEPTH ────────────────────────────────────
 PAD_DB9 = chord('Db3', 'Ab3', 'C4', 'F4', 'Eb5')
 PAD_BBM9 = chord('Bb2', 'F3', 'Ab3', 'Db4', 'C5')
+# scenes/s4.js constants mirrored here (local s)
+S4_CD = (0.22, 0.08)                        # tunnel curl: per-row duration, far → near stagger (snap)
+S4_DOT0 = 1.44                              # the signal dot is born at the vanishing point
+S4_TC0, S4_TC1 = 1.465, 1.815               # drain: first departure → last ring lands (the dot pops)
 
 
 def depth(mix, kit):
@@ -1149,7 +1275,7 @@ def depth(mix, kit):
     mix.add('pad', p1, T0, -8, hall=0.35)
     mix.add('pad', p2, b(18), -8, hall=0.35)
 
-    # Morph whooms (sub drops) on torus / terrain / helix, each with a short swell into it.
+    # Morph whooms (sub drops) on torus / terrain / tunnel, each with a short swell into it.
     for n_, m in ((17, 'Db2'), (18, 'Bb1'), (19, 'F1')):
         mix.add('boom', whoom(hz(nm(m)), 170, 0.6, key=n_), b(n_), -7)
         mix.add_end('fx', whoosh(0.14, 150, 900, 0.8, 2.0, (0, 0), ('pre', n_), 1.0), b(n_), -19)
@@ -1157,11 +1283,27 @@ def depth(mix, kit):
         mix.suck(b(n_), 0.015, 0.2, buses=('fx',), back=0.006)
         mix.duck(b(n_), 0.7, 1.2)
 
+    # b19 TUNNEL: the landscape rolls up into rings round the view axis, far rows first, sweeping
+    # toward the camera (each row on R.ease.snap, steepest ON the beat, ≈8.87–9.02). After the
+    # whoom, the second half of that motion curls once around the field and closes in on the
+    # listener: brightening, width collapsing to the centre, level = the rows' summed speed.
+    D, SPR = S4_CD
+    ens = np.convolve(ease_speed(SNAP, nsamp(D)), np.ones(nsamp(SPR)) / nsamp(SPR))
+    ens = ens[smp(0.456 * D + SPR / 2):]                         # from the beat on
+    ens = ens[:np.flatnonzero(ens > 0.02 * ens.max())[-1] + 1] / ens.max()
+    n = len(ens)
+    u = np.linspace(0.0, 1.0, n)
+    cu = tvfilt(noise(n, 'curl'), 'bp', 500 * (3600 / 500) ** u, 1.4) + 0.3 * tvfilt(noise(n, 'curl2'), 'lp', 700, 0.7)
+    cu = fade(norm(cu * ens * smoothstep(0, 0.004, taxis(n))), 2, 480)
+    mix.add('fx', pan2(cu, 0.75 * (1 - u) * np.sin(TAU * u)), b(19), -21, hall=0.15)
+    # The small signal dot is born at the tunnel's vanishing point (s4 T_DOT0, backOut to r 4).
+    mix.add('music', bubble(hz(nm('F6')), 0.11, 'dotborn'), on_frame(T0 + S4_DOT0), -27, room=0.2, hall=0.2)
+
     # A distant pulse keeps time: low-passed 16th hats.
     hats(mix, kit, T0 + S8, b(19) + S8, -22, -28, -34, lp=5500, key='d')
 
     # Glitter: ~seeded Poisson grains; dense after the burst, sparse mid-bar, heating up and
-    # spiralling into the centre during the collapse (s4 1.45 → 1.70).
+    # spiralling into the centre as the drain winds in (s4 TC0 1.465 → far rings home ≈1.70).
     g = rng('glitter')
     penta = [nm(s) for s in ('F6', 'Ab6', 'Bb6', 'C7', 'Eb7', 'F7', 'Ab7')]
     for i in range(int((b(20) - T0) / 0.002)):
@@ -1177,15 +1319,17 @@ def depth(mix, kit):
                 -20 + g.uniform(-6, 0) + 3 * coll, pan=pn, hall=0.35, dly=0.1)
 
     # The drain: a swirl that circles the field faster and faster and lands in the centre as the
-    # signal dot accretes (s4 T_DOT0 1.70 → pop T_DOTPK 1.792), then the suck-in to LIQUID.
-    t_a, t_b = T0 + 1.45, T0 + 1.792
+    # rings contract into the signal dot (s4 TC0 1.465 → the last ring lands TC1 1.815, visible
+    # from ≈1.63). The dot pops on that last ring: first shown on f559 (9.3167, r 10 → 17.8; the
+    # radius peaks at T_DOTPK 1.826) and settles at T_CLEAN 1.845, where the suck into LIQUID starts.
+    t_a, t_b = T0 + S4_TC0, T0 + S4_TC1
     n = smp(t_b) - smp(t_a)
     tt = taxis(n)
     u = tt / (t_b - t_a)
     sw = tvfilt(noise(n, 'drain'), 'bp', 700 * (6.0 ** u ** 1.5), 2.5) + 0.5 * np.sin(TAU * phase(300 * 4 ** (u ** 2)))
     sw = fade(norm(sw) * u ** 1.6, 8, smp(0.004))
     mix.add('fx', pan2(sw, 0.8 * (1 - u) * np.sin(TAU * phase(2 + 14 * u ** 2))), t_a, -17, hall=0.2)
-    mix.add('hits', pop(2400, hz(nm('F5')), 0.12, 0.004, 0.035, 'dotpop', 0.2), T0 + 1.792, -17, room=0.25)
+    mix.add('hits', pop(2400, hz(nm('F5')), 0.12, 0.004, 0.035, 'dotpop', 0.2), on_frame(t_b), -17, room=0.25)
     mix.add_end('fx', reverse_swell(0.3, 'depth', 2400), b(20) - 0.01, -13)
     mix.suck(b(20), 0.03, 0.1)
 
@@ -1266,6 +1410,8 @@ def liquid(mix, kit):
 SPLITS = [(24, chord('F3', 'F4', 'Ab4', 'C5')), (25, chord('Ab3', 'Ab4', 'C5', 'Eb5')),
           (26, chord('Bb3', 'Bb4', 'Db5', 'F5')), (27, chord('C4', 'Bb4', 'C5', 'E5', 'G5'))]
 T_GAP = b(28) - 0.2
+S6_OUT0, S6_CLEAN = 1.68, 1.848             # s6: the implosion starts / the last dots land (local s)
+GAP_SUCK_DB = -28.0                         # reverse-suck in the gap: ≈ −28 dB (10 ms max) under the mix RMS
 
 
 def stutter(notes, key):
@@ -1320,7 +1466,20 @@ def multiverse(mix, kit):
     amp = 1 - smoothstep(b(26) - T0, b(27) - T0, taxis(smp(b(27) + 0.05) - smp(T0)))
     sub_line(mix, [(T0, nm('F1')), (b(25), sub_note(nm('Ab2'))), (b(26), sub_note(nm('Bb2')))],
              T0, b(27) + 0.05, -9, amp=amp)
-    mix.gap(T_GAP, b(28))
+    mix.gap(T_GAP, b(28), keep=('air',))
+
+    # The wall implodes back into the dot INSIDE the gap (s6 OUT0 → the last dots land at T_CLEAN).
+    # So the motion isn't silent, a reverse-suck on the 'air' bus (the gap spares it), ~28 dB
+    # under the mix with no transient: it swells out of nothing, darkens, collapses to mono as the
+    # dots converge and vanishes as they land, so the clean-dot frames before the final hit
+    # (13.098 → 13.125) are digital silence again — the same inhale → breath → hit every other
+    # big accent gets from suck().
+    s0, s1 = T0 + S6_OUT0, T0 + S6_CLEAN
+    rs = trim_tail(reverse_swell(s1 - s0 + 0.04, 'implode', 1800, bright=0.4))[:, -nsamp(s1 - s0):]
+    u = np.linspace(0.0, 1.0, rs.shape[1])
+    mid, side = rs.mean(axis=0), 0.5 * (rs[0] - rs[1]) * (1 - u) ** 1.5
+    rs = filt(np.stack([mid + side, mid - side]), 'lp', 5000, 0.6)
+    mix.add_end('air', fade(norm(rs), smp(0.03), smp(0.014)), s1, GAP_SUCK_DB)
 
 
 # ────────────────────────────────────── 13.125 – 15.0  LOCKUP ─────────────────────────────────
@@ -1363,27 +1522,44 @@ def lockup(mix, kit):
         mix.add('music', bell(hz(nm(m)), 1.6 - 0.2 * i, ('sting', i), 1.1 - 0.1 * i), tsg + dt, d,
                 pan=(-0.2, 0.2, 0.0)[i], hall=0.4, dly=0.25)
         mix.add('music', pluck(hz(nm(m)) / 2, 0.5, 0.2, ('stingp', i)), tsg + dt, d - 9, room=0.2)
-    # The mono line decodes L → R (s7 monoT): digital chatter, then each glyph locks.
-    for i, (ch, ap, st) in enumerate(s7_decode()):
+    # The mono line decodes L → R (s7 monoT, from T_META = b30 + ⅛): digital chatter, then each
+    # glyph locks. The last glyph locks ON the sting, so its lock sits on the sting's own sample.
+    dec = s7_decode()
+    for i, (ch, ap, st) in enumerate(dec):
         if ch == ' ':
             continue
         g = rng('dec', i)
         blip = fade(square(g.uniform(2200, 5200), nsamp(0.004)) * np.exp(-taxis(nsamp(0.004)) / 0.0015), 2, 24)
         pn = -0.6 + 1.2 * i / 29
         mix.add('fx', fade(filt(blip, 'lp', 9000), 2, 24), on_frame(ap), -34, pan=pn)
-        mix.add('fx', pop(5200, 3800, 0.02, 0.001, 0.004, ('lock', i), 0.2), on_frame(st), -38, pan=pn)
+        mix.add('fx', pop(5200, 3800, 0.02, 0.001, 0.004, ('lock', i), 0.2),
+                tsg if i == len(dec) - 1 else on_frame(st), -38, pan=pn)
+
+    # The period's wink sends a light pulse right → left along the hairline (s7 drawGlint: quartOut
+    # over 0.3 s, 20 ms fade-in, (1 − u)^2.2 fade) — a whisper of air travelling with it.
+    n = nsamp(S7_GLINT_D)
+    t = taxis(n)
+    u = t / S7_GLINT_D
+    gl = tvfilt(noise(n, 'glint'), 'bp', 9500 - 3000 * u, 1.6) + 0.25 * filt(noise(n, 'glint2'), 'hp', 11000)
+    gl = fade(norm(gl * smoothstep(0, 0.02, t) * (1 - u) ** 2.2), 4, 480)
+    mix.add('fx', pan2(gl, 0.55 - 1.1 * (1 - (1 - u) ** 4)), tsg, -27, hall=0.2)
+
+
+S7_GLINT_D = 0.3                              # s7 GLINT_D
 
 
 def s7_decode():
-    """Re-derive s7's per-character decode schedule (scenes/s7.js monoT) in global time."""
+    """Re-derive s7's per-character decode schedule (scenes/s7.js monoT) in global time:
+    appear from T_META (b30 + ⅛ = 14.296875), and the last glyph settles ON the sting (b31)."""
     MONO = 'REEL 2026 — AVAILABLE FOR WORK'
     rnd = mulberry32(707)
     out = []
     for i, ch in enumerate(MONO):
-        ap = b(28) + b(3) + 0.012 + i * 0.0045 + rnd() * 0.006
+        ap = b(28) + b(2) + S8 + 0.012 + i * 0.0045 + rnd() * 0.006
         st = ap + 0.04 + rnd() * 0.045
         rnd()
         out.append((ch, ap, st))
+    out[-1] = (out[-1][0], out[-1][1], b(31))
     return out
 
 
