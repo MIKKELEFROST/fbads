@@ -2,11 +2,9 @@
 """
 Synthesises the soundtrack (128 BPM, D major, 36 beats = 16.9 s) with every hit and sound effect
 locked to the same beat grid as the animation in src/main.js. Pure numpy/scipy — no samples, nothing
-to license. The music has no words, so it serves every language version; --vo adds a voice-over on
-top and ducks the music under it.
+to license. The soundtrack has no words, so it serves every language version.
 
-    python3 tools/make_audio.py               # -> out/soundtrack.wav (48 kHz, 16-bit, ~-14 LUFS)
-    python3 tools/make_audio.py --vo=vo/da    # -> out/soundtrack-da.wav (music + Danish voice-over)
+    python3 tools/make_audio.py            # -> out/soundtrack.wav (48 kHz, 16-bit, ~-14 LUFS)
 
 Cue sheet (beats; 1 beat = 0.46875 s):
    0-4   trade words         kick + snap on every word, Bm
@@ -17,8 +15,6 @@ Cue sheet (beats; 1 beat = 0.46875 s):
   20-28  the calls           phone buzz + ringtone at 20.25, notification dings at 22.5..25.5
   28-36  end card            logo impact at 28, tagline at 30, CTA pop at 31, final chord at 34
 """
-import argparse
-import json
 import os
 import shutil
 import subprocess
@@ -26,10 +22,6 @@ import wave
 
 import numpy as np
 import scipy.signal as sg
-
-ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-ap.add_argument('--vo', metavar='DIR', help='voice-over folder with cues.json + one WAV per line, e.g. vo/da')
-ARGS = ap.parse_args()
 
 SR = 48000
 BPM = 128
@@ -39,9 +31,7 @@ DUR = BEATS * B
 N = int(round(SR * DUR))
 rng = np.random.default_rng(128)
 HERE = os.path.dirname(os.path.abspath(__file__))
-VO_DIR = os.path.join(HERE, '..', ARGS.vo) if ARGS.vo else None
-VO = json.load(open(os.path.join(VO_DIR, 'cues.json'), encoding='utf-8')) if VO_DIR else None
-OUT = os.path.join(HERE, '..', 'out', f"soundtrack-{VO['lang']}.wav" if VO else 'soundtrack.wav')
+OUT = os.path.join(HERE, '..', 'out', 'soundtrack.wav')
 
 
 def b(n):
@@ -112,7 +102,7 @@ def fade(x, a=0.002, r=0.01):
 
 
 # ------------------------------------------------------------------ buses + placement
-BUS = {k: np.zeros((2, N)) for k in ('drums', 'bass', 'music', 'sfx', 'vo', 'send')}
+BUS = {k: np.zeros((2, N)) for k in ('drums', 'bass', 'music', 'sfx', 'send')}
 
 
 def place(bus, x, t0, gain=1.0, pan=0.0, send=0.0):
@@ -500,112 +490,6 @@ for k in KICKS + [FINAL]:
 for bus in ('bass', 'music'):
     BUS[bus] *= duck
 
-GAINS = {'drums': 0.75, 'bass': 1.1, 'music': 1.5, 'sfx': 1.15}
-
-
-# ------------------------------------------------------------------ voice-over (--vo)
-def read_wav(path):
-    """Mono float signal at SR from a 16-bit PCM WAV of any sample rate."""
-    with wave.open(path) as w:
-        sr, ch = w.getframerate(), w.getnchannels()
-        x = np.frombuffer(w.readframes(w.getnframes()), '<i2').astype(float) / 32768
-    x = x.reshape(-1, ch).mean(axis=1)
-    if sr != SR:
-        g = np.gcd(sr, SR)
-        x = sg.resample_poly(x, SR // g, sr // g)
-    return x
-
-
-def biquad(x, kind, f0, gain_db, q=0.707):
-    """RBJ-cookbook peaking or high-shelf filter."""
-    A, w0 = 10 ** (gain_db / 40), 2 * np.pi * f0 / SR
-    c, al = np.cos(w0), np.sin(w0) / (2 * q)
-    if kind == 'peak':
-        bb, aa = [1 + al * A, -2 * c, 1 - al * A], [1 + al / A, -2 * c, 1 - al / A]
-    else:
-        r = 2 * np.sqrt(A) * al
-        bb = [A * ((A + 1) + (A - 1) * c + r), -2 * A * ((A - 1) + (A + 1) * c), A * ((A + 1) + (A - 1) * c - r)]
-        aa = [(A + 1) - (A - 1) * c + r, 2 * ((A - 1) - (A + 1) * c), (A + 1) - (A - 1) * c - r]
-    return sg.lfilter(bb, aa, x)
-
-
-def kweight(x):
-    """ITU-R BS.1770 K-weighting, for comparing the loudness of the voice and the music under it."""
-    return hp(biquad(x, 'shelf', 1682, 4.0), 38, 2)
-
-
-def compress(x, thresh=-20.0, ratio=3.0, attack=0.004, release=0.09):
-    """Feed-forward RMS compressor (threshold in dBFS)."""
-    ka, kr = 1 - np.exp(-1 / (attack * SR)), 1 - np.exp(-1 / (release * SR))
-    env = np.empty_like(x)
-    e = 0.0
-    for i, v in enumerate(x * x):
-        e += (v - e) * (ka if v > e else kr)
-        env[i] = e
-    return x * 10 ** (np.minimum(0, (thresh - 10 * np.log10(env + 1e-12)) * (1 - 1 / ratio)) / 20)
-
-
-def speech_rms(x):
-    """K-weighted RMS over the 20 ms frames that carry speech (within 30 dB of the loudest)."""
-    k = kweight(x)
-    fr = int(0.02 * SR)
-    ms = np.array([np.mean(k[i:i + fr] ** 2) for i in range(0, len(k) - fr, fr)])
-    return np.sqrt(np.mean(ms[ms > ms.max() * 1e-3]))
-
-
-VO_OVER_BED = 10.0  # dB (K-weighted) the voice sits above the ducked music while it speaks, at least per line
-DUCK_DB = {'drums': 5, 'bass': 6, 'music': 8, 'sfx': 7, 'send': 6}
-CARVE_DB = 6  # extra dip of the 1.5-6 kHz band (where consonants live) in everything except the bass
-if VO:
-    lines, spans = [], []
-    for ln in VO['lines']:
-        x = read_wav(os.path.join(VO_DIR, ln['file']))
-        x = hp(x, 85, 2)
-        x = biquad(x, 'peak', 250, -2.0, 1.0)  # a little less boxy
-        x = biquad(x, 'shelf', 4500, 2.5)      # presence, so it cuts through on phone speakers
-        x = compress(x / np.max(np.abs(x)), -20, 3.0)
-        x = fade(x * 0.1 / speech_rms(x), 0.005, 0.03)
-        t0 = ln['at']
-        lines.append((x, t0))
-        spans.append((t0, t0 + len(x) / SR))
-        if t0 + len(x) / SR > DUR - 0.25:
-            print(f"warning: {ln['file']} runs into the fade-out at the end")
-    # the music ducks under the voice: gate on the line spans (with look-ahead), smoothed at 1 kHz
-    rate = 1000
-    gate = np.zeros(int(DUR * rate) + 1)
-    for a, z in spans:
-        gate[max(0, int((a - 0.06) * rate)):int((z + 0.06) * rate)] = 1
-    act = np.empty_like(gate)
-    ka, kr = 1 - np.exp(-1 / (0.05 * rate)), 1 - np.exp(-1 / (0.3 * rate))
-    e = 0.0
-    for i, g in enumerate(gate):
-        e += (g - e) * (ka if g > e else kr)
-        act[i] = e
-    act = np.interp(np.arange(N) / SR, np.arange(len(act)) / rate, act)
-    carve_sos = sg.butter(2, [1500 / (SR / 2), 6000 / (SR / 2)], btype='bandpass', output='sos')
-    for k, d in DUCK_DB.items():
-        if k != 'bass':  # zero-phase band split, so band + rest adds back up exactly
-            band = sg.sosfiltfilt(carve_sos, BUS[k], axis=-1)
-            BUS[k] += band * (10 ** (-CARVE_DB * act / 20) - 1)
-        BUS[k] *= 10 ** (-d * act / 20)
-    for x, t0 in lines:
-        place('vo', x, t0)  # dry and centred, like a studio read
-    # set the voice level from the music actually under it
-    rms = lambda v: np.sqrt(np.mean(v ** 2))  # noqa: E731
-    talk = np.zeros(N, bool)
-    for a, z in spans:
-        talk[int(a * SR):int(z * SR)] = True
-    kbed = kweight(sum(BUS[k] * g for k, g in GAINS.items()).mean(axis=0))
-    kvo = kweight(BUS['vo'][0])
-    GAINS['vo'] = 10 ** (VO_OVER_BED / 20) * rms(kbed[talk]) / rms(kvo[talk])
-    for (a, z), ln in zip(spans, VO['lines']):
-        s = slice(int(a * SR), int(z * SR))
-        over = 20 * np.log10(GAINS['vo'] * rms(kvo[s]) / rms(kbed[s]))
-        lift = min(2.5, max(0.0, VO_OVER_BED - over))  # lines over the busiest music come up a little
-        BUS['vo'][:, s] *= 10 ** (lift / 20)
-        print(f"vo {ln['id']}  {a:5.2f}-{z:5.2f}s  {over + lift:+5.1f} dB over the music"
-              f"{f' (lifted {lift:.1f} dB)' if lift else ''}  {ln['text']}")
-
 # reverb: stereo exponentially decaying noise IR
 ir_t = tt(1.6)
 ir = np.stack([lp(noise(len(ir_t)), 5500) * np.exp(-ir_t / 0.32) for _ in range(2)])
@@ -613,6 +497,7 @@ ir[:, : int(0.012 * SR)] = 0
 ir /= np.sqrt((ir ** 2).sum(axis=1, keepdims=True))
 verb = np.stack([sg.fftconvolve(BUS['send'][c], ir[c])[:N] for c in range(2)]) * 0.5
 
+GAINS = {'drums': 0.75, 'bass': 1.1, 'music': 1.5, 'sfx': 1.15}
 mixed = sum(BUS[k] * g for k, g in GAINS.items()) + verb
 mixed = hp(mixed, 28, 2)
 mixed[:, -int(0.25 * SR):] *= np.linspace(1, 0, int(0.25 * SR)) ** 1.5  # clean tail to silence at the very end
@@ -659,15 +544,13 @@ def write_wav(path, x):
 
 
 TARGET = -14.0
-if VO:  # the voice was levelled against the music, which leaves the sum far above full scale:
-    mixed *= 10 ** ((TARGET - lufs(mixed)) / 20)  # bring it to the target first, so the limiter only shaves peaks
 mixed = limit(mixed * 0.9)
 for _ in range(3):
     gain = 10 ** ((TARGET - lufs(mixed)) / 20)
     mixed = limit(mixed * gain)
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 write_wav(OUT, mixed)
-for k in GAINS:
+for k in ('drums', 'bass', 'music', 'sfx'):
     v = BUS[k] * GAINS[k]
     print(f'{k:6s} peak {20 * np.log10(np.max(np.abs(v)) + 1e-12):6.1f} dBFS  rms {20 * np.log10(np.sqrt(np.mean(v ** 2)) + 1e-12):6.1f} dBFS')
 print(f'wrote {os.path.normpath(OUT)}  peak {20 * np.log10(np.max(np.abs(mixed))):.2f} dBFS  loudness {lufs(mixed):.1f} LUFS  {N / SR:.3f}s')
