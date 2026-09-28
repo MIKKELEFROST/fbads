@@ -8,7 +8,7 @@ out/cues.json, which the page itself exports.
     node tools/render.mjs --cues && python3 tools/make_audio.py     # -> out/soundtrack.wav (48 kHz, ~-14 LUFS)
     python3 tools/make_audio.py --vo=vo/da                          # -> out/soundtrack-da.wav (+ Danish voice-over)
 
-Music (beats): 0-4 G, a light strum under "Du er god med dine hænder" · 4-8 Em | C, quieter, "Men online ..."
+Music (beats): 0-4 G, a light strum under "Du er dygtig med dine hænder" · 4-8 Em | C, quieter, "Men online ..."
 · 8-14.5 G | D | C | G, the band picks up while the website is glued on · 14.5-19 D | G, the phone rings
 · 19-26 C | G | D | G, the end card (a whistled phrase leads into it).
 """
@@ -229,8 +229,8 @@ for beat in np.arange(8, 24, 1):
 for beat in np.arange(8.5, 24, 1):
     place('drums', tambourine(0.9), b(beat), 0.12, 0.4)
 place('drums', stomp(), b(24), 0.7)
-# a whistled phrase while the notes pile up, between the phone bell and the last line
-whistle([('D5', 0.5), ('G5', 0.5), ('B5', 0.75), ('G5', 0.5)], 10.2)
+# a whistled phrase after the phone bell, leading into the end card and the last line
+whistle([('D5', 0.5), ('G5', 0.5), ('B5', 1.0)], 10.65)
 
 
 # ------------------------------------------------------------------ paper sounds from the page's cue list
@@ -251,11 +251,15 @@ def fx_slide(c):
 
 
 def fx_word(c):
-    # each letter tile slapped down: a soft thump and a crinkle, one per letter (a drawing apart)
+    # each letter tile slapped down: a soft thump and a crinkle, one per letter (a drawing apart). The words are
+    # stuck on as the voice says them, so under the voice only the thump stays: the crinkle would sit right on
+    # the consonants that start the word.
     for k in range(min(c['n'], 7)):
         t = tt(0.07)
-        th = np.sin(2 * np.pi * 180 * t) * np.exp(-t / 0.012) * 0.6 + rustle(0.07, 1500, 7000, 0.006) * np.exp(-t / 0.02)
-        place('fx', fade(th, 0.0005, 0.02), c['t'] + k * 0.02, 0.2, rng.uniform(-0.3, 0.3))
+        th = np.sin(2 * np.pi * 180 * t) * np.exp(-t / 0.012) * 0.6
+        if not VO:
+            th = th + rustle(0.07, 1500, 7000, 0.006) * np.exp(-t / 0.02)
+        place('fx', fade(th, 0.0005, 0.02), c['t'] + k * 0.02, 0.2 if not VO else 0.12, rng.uniform(-0.3, 0.3))
 
 
 def fx_sweep(c):
@@ -415,7 +419,7 @@ def speech_rms(x):
 
 
 VO_OVER_BED = 12.0  # dB (K-weighted) the voice sits above the ducked music while it speaks, at least per line
-DUCK_DB = {'guitar': 8, 'bass': 3, 'drums': 6, 'lead': 9, 'fx': 5, 'send': 7}
+DUCK_DB = {'guitar': 12, 'bass': 3, 'drums': 8, 'lead': 9, 'fx': 10, 'send': 7}
 CARVE_DB = 6  # extra dip of the 1.5-6 kHz band (where consonants live) in everything except the bass
 if VO:
     lines, spans = [], []
@@ -481,8 +485,9 @@ mixed = filt(mixed, 'lowpass', 16000)
 mixed[:, -int(0.35 * SR):] *= np.linspace(1, 0, int(0.35 * SR)) ** 1.5
 
 
-def limit(x, ceiling=0.89, look=0.004, release=0.06):
-    """Look-ahead peak limiter: gain drops before each peak, recovers smoothly."""
+def limit(x, ceiling=0.85, look=0.004, release=0.06):
+    """Look-ahead peak limiter: gain drops before each peak, recovers smoothly. The ceiling sits a little lower
+    than in the other ads: the paper clicks are sharp, and AAC would otherwise push them to -0.5 dBTP."""
     from scipy.ndimage import minimum_filter1d, uniform_filter1d
     L = int(look * SR)
     g = np.minimum(1, ceiling / np.maximum(np.max(np.abs(x), axis=0), 1e-9))

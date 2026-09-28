@@ -4,10 +4,10 @@
   "temperature": 0.7,
   "top_p": 0.95,
   "lines": [
-    { "id": "l1", "file": "l1.wav", "at": 0.30, "text": "Du er god med dine hænder.", "cfg": 0.3, "seed": 2 },
-    { "id": "l2", "file": "l2.wav", "at": 2.70, "text": "Men online er du svær at finde.", "cfg": 0.5, "seed": 1 },
-    { "id": "l3", "file": "l3.wav", "at": 5.10, "text": "Så vi klipper, klistrer og bygger din hjemmeside.", "cfg": 0.3, "seed": 2 },
-    { "id": "l4", "file": "l4.wav", "at": 8.75, "text": "Og så ringer telefonen.", "cfg": 0.3, "seed": 1 },
-    { "id": "l5", "file": "l5.wav", "at": 11.90, "text": "Håndlavede hjemmesider til håndværkere.", "cfg": 0.3, "seed": 1 }
+    { "id": "l1", "file": "l1.wav", "at": 0.3, "text": "Du er dygtig med dine hænder.", "cfg": 0.5, "seed": 1 },
+    { "id": "l2", "file": "l2.wav", "at": 2.7, "text": "Men online er du svær at finde.", "cfg": 0.3, "seed": 5, "keep": [0.99, 2.7] },
+    { "id": "l3", "file": "l3.wav", "at": 5.1, "text": "Vi klipper, limer og bygger din hjemmeside.", "cfg": 0.3, "seed": 5, "keep": [0.52, 2.79] },
+    { "id": "l4", "file": "l4.wav", "at": 8.45, "text": "Og så ringer telefonen.", "cfg": 0.5, "seed": 4 },
+    { "id": "l5", "file": "l5.wav", "at": 11.9, "text": "Hjemmesider med håndværk, til håndværkere.", "cfg": 0.3, "seed": 3 }
   ]
 }

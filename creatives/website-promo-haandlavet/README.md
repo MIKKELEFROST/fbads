@@ -1,8 +1,8 @@
 # Håndlavet: papirklip i stop-motion (15 s, 9:16)
 
 En papirklips-annonce i stop-motion for et firma, der laver hjemmesider til håndværkere. Collagebogstaver, værktøj
-af papir, en papirtelefon, saks og tape bygger historien: du er god med dine hænder, men online er du svær at
-finde, så vi klipper, klistrer og bygger din hjemmeside, og så ringer telefonen. Den har dansk speak. Brandet
+af papir, en papirtelefon, saks og tape bygger historien: du er dygtig med dine hænder, men online er du svær at
+finde, så vi klipper, limer og bygger din hjemmeside, og så ringer telefonen. Den har dansk speak. Brandet
 **sitecrew** er en pladsholder.
 
 | Fil | Hvad |
@@ -19,11 +19,11 @@ med hånden. Collageordene bliver klistret på i samme øjeblik, som stemmen sig
 
 | Tid | Scene | Speak |
 | --- | --- | --- |
-| 0,0–2,4 s | Kraftpapir. Hammer, sav, malerrulle, svensknøgle og blyant af papir lander om collagen "DU ER GOD MED DINE HÆNDER." | "Du er god med dine hænder." |
+| 0,0–2,4 s | Kraftpapir. Hammer, sav, malerrulle, svensknøgle og blyant af papir lander om collagen "DU ER DYGTIG MED DINE HÆNDER." | "Du er dygtig med dine hænder." |
 | 2,4–4,9 s | En papirtelefon glider ind med en søgning på "tømrer i nærheden", der ikke finder noget. En lup hopper hen over resultaterne, og et rødt "?" dukker op: "MEN ONLINE ER DU SVÆR AT FINDE." | "Men online er du svær at finde." |
-| 4,9–8,4 s | En saks klipper den gamle skærm væk, tape holder en ny fast, og hjemmesiden limes på stykke for stykke: "KLIP. KLISTR. BYG." | "Så vi klipper, klistrer og bygger din hjemmeside." |
-| 8,4–11,0 s | Telefonen ringer, og sedler stables oven på den (ny booking, nyt tilbud, ny anmeldelse): "RING RING!" | "Og så ringer telefonen." |
-| 11,0–15,0 s | Et blåt ark glider ind over det hele. Logoet og "sitecrew" klistres på, derefter taglinen og et papirskilt med "Få en gratis demo". | "Håndlavede hjemmesider til håndværkere." |
+| 4,9–8,4 s | En saks klipper den gamle skærm væk, tape holder en ny fast, og hjemmesiden limes på stykke for stykke: "KLIP. LIM. BYG." | "Vi klipper, limer og bygger din hjemmeside." |
+| 8,4–10,9 s | "RING RING!" Derefter ringer telefonen, og sedler stables oven på den (ny booking, nyt tilbud, ny anmeldelse). | "Og så ringer telefonen." |
+| 10,9–15,0 s | Et blåt ark glider ind over det hele. Logoet og "sitecrew" klistres på, derefter taglinen og et papirskilt med "Få en gratis demo". | "Hjemmesider med håndværk, til håndværkere." |
 
 ## Sådan er den lavet
 
@@ -53,12 +53,19 @@ stemme.
 
 Hver replik er valgt blandt flere bud:
 - Den danske talegenkender Røst skulle høre præcis den rigtige tekst, både i replikken alene og i det færdige mix
-  med musikken under.
+  med musikken under, også efter AAC-kodningen i MP4'en.
 - Stemmen er sammenlignet med de andre annoncer, så det lyder som samme speaker.
+
+Tre formuleringer er valgt, fordi stemmen udtaler dem rent:
+- "dygtig" i stedet for "god": "du er god" blev til "du går".
+- "limer" i stedet for "klistrer": stemmen sagde "klistre".
+- "Hjemmesider med håndværk" i stedet for "Håndlavede hjemmesider": endelsen "-ede" forsvandt.
 
 Lyt den alligevel igennem, før annoncen går live.
 
-Musikken dukker sig under stemmen: 3–9 dB, og 6 dB ekstra i 1,5–6 kHz-båndet, hvor konsonanterne ligger.
+Musikken dukker sig under stemmen: 3–12 dB, og 6 dB ekstra i 1,5–6 kHz-båndet, hvor konsonanterne ligger.
+Papirlydene fra collagebogstaverne er dæmpet, mens stemmen taler, fordi ordene klistres på samtidig med, at de
+bliver sagt.
 Stemmen ligger mindst 12 dB over musikken. Tidspunkterne står i sekunder i [`vo/da/cues.json`](vo/da/cues.json)
 (`at`). Collageordene i `src/config.js` er sat til de tidspunkter, hvor stemmen siger dem.
 
@@ -82,7 +89,7 @@ samtykke. Lyden har et uhørligt vandmærke (Perth), der viser, at den er AI-gen
 ## Ret tekst eller brand
 
 Brandnavn, tagline, CTA, collageordene, søgningen, eksemplet på hjemmesiden og sedlerne ligger i
-[`src/config.js`](src/config.js). Collagelinjerne kan rumme ca. 10 tegn. Efter ændringer:
+[`src/config.js`](src/config.js). Collagelinjerne kan rumme 10–12 tegn. Efter ændringer:
 
 ```bash
 npm install

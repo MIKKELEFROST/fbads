@@ -4,12 +4,12 @@
  * at 12 drawings a second (the video runs at 24 fps, each drawing held for two frames), and every paper piece
  * "boils" a little from drawing to drawing, like pieces nudged by hand under the camera.
  *
- *   0.0  kraft paper; cut-out tools land around a collage headline: "DU ER GOD MED DINE HÆNDER."
+ *   0.0  kraft paper; cut-out tools land around a collage headline: "DU ER DYGTIG MED DINE HÆNDER."
  *   2.5  a paper phone slides in with a search that finds nothing: "MEN ONLINE ER DU SVÆR AT FINDE."
  *   4.9  scissors cut the old screen away, tape holds a new one, the website is glued on piece by piece:
- *        "KLIP. KLISTR. BYG."
- *   8.4  the phone rings, notes pile up: "RING RING!"
- *  11.0  a blue sheet slides over: the logo, sitecrew, the tagline and a paper CTA tag
+ *        "KLIP. LIM. BYG."
+ *   8.4  "RING RING!", then the phone rings and notes pile up
+ *  10.9  a blue sheet slides over: the logo, sitecrew, the tagline and a paper CTA tag
  *
  * The collage words are stuck on as the voice says them (times in config.js, from the voice-over alignment).
  */
@@ -30,10 +30,10 @@
   const T = {
     tools: [-1, -1, 0.12, 0.3, 0.45], toolsOut: 2.2, handsOut: 2.2, // the hammer and the saw are on the table from the first frame
     phoneIn: 2.45, results: 3.0, glass: 3.35, question: 4.2, searchOut: 4.6,
-    scissors: 5.0, snips: [5.55, 5.8], screenFall: 5.85, newScreen: 6.0, tape: [6.05, 6.3],
-    pieces: [6.65, 6.85, 7.05, 7.25, 7.45], buildOut: 8.1,
-    buzz: [8.95, 9.95], notes: [9.5, 9.85, 10.2],
-    sheet: 10.95, logo: 11.3, word: 11.45, tag: 12.0, cta: 12.9,
+    scissors: 4.8, snips: [5.3, 5.5], screenFall: 5.58, newScreen: 5.62, tape: [5.72, 5.92],
+    pieces: [6.2, 6.4, 6.6, 6.8, 7.0], buildOut: 8.1,
+    buzz: [9.75, 10.6], notes: [10.0, 10.3, 10.6], // the phone rings right after the line that says so
+    sheet: 10.85, logo: 11.15, word: 11.3, tag: 11.95, cta: 12.9,
   };
 
   // ---------------------------------------------------------------- stop-motion helpers
@@ -819,7 +819,7 @@
     const S = CFG.scenes;
     if (t < T.toolsOut + 0.6) tools(ctx, t);
     phone(ctx, t);
-    if (t < T.handsOut + 0.7) collage(ctx, 'hands', S.hands, t, T.handsOut);
+    if (t < T.handsOut + 0.7) collage(ctx, 'hands', S.hands, t, T.handsOut, 360, 92);
     if (t >= S.search[0][0][1] - 0.1 && t < T.searchOut + 0.8) collage(ctx, 'search', S.search, t, T.searchOut);
     if (t >= S.build[0][0][1] - 0.1 && t < T.buildOut + 0.8) collage(ctx, 'build', S.build, t, T.buildOut, 350, 108);
     if (t >= S.ring[0][0][1] - 0.1 && t < T.sheet + 0.5) collage(ctx, 'ring', S.ring, t, undefined, 390, 128);
@@ -828,7 +828,7 @@
     const f = frameNo(t);
     ctx.save();
     ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.11;
     ctx.drawImage(grain, -Math.floor(hash('g', f, 1) * 40), -Math.floor(hash('g', f, 2) * 40), W + 40, H + 40);
     ctx.restore();
   }

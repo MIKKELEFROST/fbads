@@ -12,7 +12,8 @@
  * No motion blur by default (--samples=1): stop motion is made of sharp single exposures. --samples=4 averages
  * sub-frames over a 180° shutter like the other ads.
  *
- * Other options: --fps=24 --shutter=0.5 --workers=4 --crf=15 --audio=out/soundtrack.wav (--audio=none)
+ * Other options: --fps=24 --shutter=0.5 --workers=4 --audio=out/soundtrack.wav (--audio=none)
+ *                --crf=17 (the paper grain is costly to encode; 17 keeps the file near 9 MB)
  *                --out=file.mp4 --frames=dir (keep/resume sub-frames there)
  * ffmpeg is taken from $FFMPEG or PATH.
  */
@@ -164,7 +165,7 @@ try {
     const withAudio = audio && fs.existsSync(audio);
     if (withAudio) argv.push('-i', audio);
     argv.push('-vf', vf.join(','), '-r', String(fps), '-t', String(meta.DUR),
-      '-c:v', 'libx264', '-preset', 'slow', '-crf', String(args.crf || 15), '-profile:v', 'high', '-tune', 'animation',
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', String(args.crf || 17), '-profile:v', 'high', '-tune', 'animation',
       '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv');
     if (withAudio) argv.push('-c:a', 'aac', '-b:a', '256k', '-ar', '48000');
     argv.push('-movflags', '+faststart', outFile);
