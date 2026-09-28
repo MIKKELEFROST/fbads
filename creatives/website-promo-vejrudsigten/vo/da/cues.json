@@ -4,10 +4,10 @@
   "temperature": 0.7,
   "top_p": 0.95,
   "lines": [
-    { "id": "l1", "file": "l1.wav", "at": 0.3, "text": "Her er vejret for kalenderen.", "cfg": 0.3, "seed": 2 },
-    { "id": "l2", "file": "l2.wav", "at": 2.05, "text": "Det er tørt. Ingen opgaver i sigte.", "cfg": 0.5, "seed": 3, "keep": [0.67, 3.14] },
-    { "id": "l3", "file": "l3.wav", "at": 4.8, "text": "Men fra vest driver en ny hjemmeside ind over landet.", "cfg": 0.5, "seed": 1, "keep": [0.52, 3.38] },
-    { "id": "l4", "file": "l4.wav", "at": 7.95, "text": "Den giver et skybrud af kunder.", "cfg": 0.3, "seed": 1 },
-    { "id": "l5", "file": "l5.wav", "at": 10.25, "text": "Udsigten for resten af ugen: travlt.", "cfg": 0.5, "seed": 1, "keep": [0.62, 2.48] }
+    { "id": "l1", "file": "l1.wav", "at": 0.3, "text": "Her er udsigten for kalenderen.", "cfg": 0.3, "seed": 1, "keep": [0.58, 2.15] },
+    { "id": "l2", "file": "l2.wav", "at": 2.2, "text": "Det er tørt. Ingen opgaver i sigte.", "cfg": 0.5, "seed": 3, "keep": [0.67, 3.14] },
+    { "id": "l3", "file": "l3.wav", "at": 5.0, "text": "Men fra vest driver en ny hjemmeside ind over landet.", "cfg": 0.5, "seed": 3, "keep": [0.73, 3.5] },
+    { "id": "l4", "file": "l4.wav", "at": 8.1, "text": "Den giver et skybrud af kunder.", "cfg": 0.3, "seed": 4, "keep": [0.53, 2.01] },
+    { "id": "l5", "file": "l5.wav", "at": 10.35, "text": "Udsigten for resten af ugen: travlt.", "cfg": 0.5, "seed": 1, "keep": [0.62, 2.48] }
   ]
 }

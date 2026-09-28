@@ -13,8 +13,9 @@ ride cymbal, a soft kick, glockenspiel. Sound effects: the opening sting, heat s
 counters, the wind of the front, rain, the raindrop notes, ticks for the five days, the brand chime.
 
 Music: the sting on the downbeat · a light comp while it is dry (no bass, a heat shimmer on top) · the band comes in
-with the front, walking bass and swung ride · the shower plays the chord in raindrops · the outlook and end card on
-the full groove, a final F chord that rings out.
+with the front, walking bass and swung ride · the shower plays the chord in raindrops · the band stops under the
+last line and comes back in on a chord after "travlt" · a final F chord that rings out. While the host speaks, the
+ride and kick lay out and the brushes only swish, like a jingle under a presenter.
 """
 import argparse
 import json
@@ -42,9 +43,21 @@ DUR = CUES['DUR']
 N = int(round(SR * DUR))
 rng = np.random.default_rng(96)
 first = lambda kind: next(c for c in CUES['cues'] if c['type'] == kind)  # noqa: E731
-T_DRY = first('zero')['t'] - 1.0
+T_DRY = first('dry')['t']
 T_FRONT, T_FRONT1 = first('front')['t'], first('front')['until']
 T_OUTLOOK, T_BUSY, T_BRAND, T_CTA = first('outlook')['t'], first('busy')['t'], first('brand')['t'], first('cta')['t']
+LINES = [(c['t'], c['until']) for c in CUES['cues'] if c['type'] == 'line']  # when the host speaks
+
+
+STOP = LINES[-1]  # the band stops under the last line (the punchline) and comes back in on the chord after "travlt"
+
+
+def talking(t):
+    return any(a - 0.08 <= t <= z + 0.05 for a, z in LINES)
+
+
+def stopped(t):
+    return STOP[0] - 0.15 <= t < STOP[1] + 0.05
 
 
 def b(n):
@@ -191,8 +204,8 @@ SWING = 2 / 3  # swung 8ths: the off-beat sits two thirds into the beat
 # the opening sting: a quick vibes run up and a glockenspiel on top
 for i, n in enumerate(['F4', 'A4', 'C5', 'E5', 'F5']):
     place('vibes', vibes(n, 0.9, 2.0), 0.02 + i * 0.055, 0.2, -0.4 + 0.2 * i, send=0.3)
-place('fx', glock('F6', 0.8), 0.3, 0.12, 0.2, send=0.4)
-place('drums', ride(0.9), 0.02, 0.2, 0.3, send=0.2)
+place('fx', glock('F6', 0.8), 0.06, 0.12, 0.2, send=0.4)  # on the sting, before the first line starts
+place('drums', ride(0.9), 0.02, 0.12, 0.3, send=0.2)
 place('drums', kick(0.8), 0.02, 0.5)
 
 # comping: vibes chords on 1 and the swung "and" of 2, from the sting to the final chord
@@ -202,10 +215,13 @@ beat = 2
 while b(beat) < t_end_music:
     t0 = b(beat)
     c = chord_at(t0)
+    if stopped(t0):
+        beat += 2
+        continue
     dry = T_DRY - 0.2 <= t0 < T_FRONT - 0.3
     for k, n in enumerate(CH[c][1]):
         place('vibes', vibes(n, 0.6, 1.6 if not dry else 2.4), t0 + 0.01 * k, 0.08, -0.3 + 0.2 * k, send=0.25)
-    if not dry:
+    if not dry and not talking(t0 + b(1 + SWING)):
         for k, n in enumerate(CH[c][1][1:]):
             place('vibes', vibes(n, 0.45, 0.8), t0 + b(1 + SWING) + 0.008 * k, 0.06, 0.2 - 0.15 * k, send=0.2)
     beat += 2
@@ -213,17 +229,24 @@ while b(beat) < t_end_music:
 # bass and drums: brushes from the start, the band proper from the front on
 for k in range(2, int(t_end_music / B)):
     t0 = b(k)
+    if stopped(t0):
+        continue
     in_band = t0 >= T_FRONT - 0.05
     dry = T_DRY - 0.2 <= t0 < T_FRONT - 0.05
     if k % 2 == 1:
-        place('drums', brush(0.8 if in_band else 0.55), t0, 0.12, 0.15, send=0.1)
+        # under the voice the brushes only swish (low-passed): their hiss sits on the consonants
+        br = brush(0.8 if in_band else 0.55)
+        place('drums', filt(br, 'lowpass', 1800, 4) if talking(t0) else br, t0, 0.07 if talking(t0) else 0.12, 0.15, send=0.1)
     if in_band:
         root, walk = CH[chord_at(t0)][0]
-        place('bass', pluck_bass(root if k % 2 == 0 else walk, B * 0.85), t0, 0.55)
-        place('drums', ride(0.75 if k % 2 == 0 else 0.6), t0, 0.1, 0.35, send=0.08)
-        place('drums', ride(0.45), t0 + b(SWING), 0.07, 0.35)
-        if k % 2 == 0:
-            place('drums', kick(0.6), t0, 0.4)
+        place('bass', pluck_bass(root if k % 2 == 0 else walk, B * 0.85), t0, 0.55 if not talking(t0) else 0.4)
+        # like a jingle under a presenter: ride and kick lay out while the host speaks
+        if not talking(t0):
+            place('drums', ride(0.75 if k % 2 == 0 else 0.6), t0, 0.1, 0.35, send=0.08)
+            if k % 2 == 0:
+                place('drums', kick(0.6), t0, 0.4)
+        if not talking(t0 + b(SWING)):
+            place('drums', ride(0.45), t0 + b(SWING), 0.07, 0.35)
     elif not dry and k % 2 == 0:
         place('bass', pluck_bass(CH[chord_at(t0)][0][0], B * 1.6), t0, 0.45)
 # the final chord
@@ -255,11 +278,11 @@ def fx_front(c):
     n = len(w)
     pan = np.linspace(-0.8, 0.8, n)  # the wind crosses from west to east with the front
     th = (pan + 1) * np.pi / 4
-    place('fx', np.stack([w * np.cos(th), w * np.sin(th)]), c['t'] - 0.2, 0.18, send=0.2)
-    # rain behind the front
+    place('fx', np.stack([w * np.cos(th), w * np.sin(th)]), c['t'] - 0.2, 0.14, send=0.2)
+    # rain behind the front (kept low: it shares the band of the consonants in the line over it)
     r = filt(noise(d + 1.5), 'bandpass', [2500, 9000]) * 0.25
     env = np.clip(np.linspace(-0.5, 1.5, len(r)), 0, 1) * np.clip(np.linspace(3, 0, len(r)), 0, 1)
-    place('fx', r * env, c['t'] + 0.4, 0.1, 0.1, send=0.1)
+    place('fx', r * env, c['t'] + 0.4, 0.045, 0.1, send=0.1)
 
 
 def fx_drop(c):
@@ -282,10 +305,10 @@ def fx_day(c):
 
 
 def fx_busy(c):
-    place('drums', kick(1.0), c['t'], 0.5)
-    place('drums', ride(1.0), c['t'], 0.16, 0.2, send=0.2)
+    # "travlt." pops on the word; the chord comes as the word ends, so nothing sits on its consonants
+    t0 = c['t'] + 0.45
     for i, n in enumerate(['F4', 'A4', 'C5', 'F5']):
-        place('fx', vibes(n, 0.9, 1.4), c['t'] + 0.012 * i, 0.07, -0.3 + 0.2 * i, send=0.3)
+        place('fx', vibes(n, 0.9, 1.4), t0 + 0.012 * i, 0.06, -0.3 + 0.2 * i, send=0.3)
 
 
 def fx_brand(c):
@@ -300,7 +323,7 @@ def fx_cta(c):
     place('fx', glock('F6', 1.0), c['t'] + 0.02, 0.12, 0.0, send=0.4)
 
 
-FX = {'intro': fx_intro, 'sun': fx_sun, 'zero': fx_zero, 'front': fx_front, 'drop': fx_drop, 'outlook': fx_outlook,
+FX = {'intro': fx_intro, 'line': lambda c: None, 'sun': fx_sun, 'dry': lambda c: None, 'zero': fx_zero, 'front': fx_front, 'drop': fx_drop, 'outlook': fx_outlook,
       'day': fx_day, 'busy': fx_busy, 'brand': fx_brand, 'cta': fx_cta}
 for cue in CUES['cues']:
     FX[cue['type']](cue)
@@ -343,17 +366,6 @@ def kweight(x):
     return filt(biquad(x, 'shelf', 1682, 4.0), 'highpass', 38)
 
 
-def compress(x, thresh=-20.0, ratio=3.0, attack=0.004, release=0.09):
-    """Feed-forward RMS compressor (threshold in dBFS)."""
-    ka, kr = 1 - np.exp(-1 / (attack * SR)), 1 - np.exp(-1 / (release * SR))
-    env = np.empty_like(x)
-    e = 0.0
-    for i, v in enumerate(x * x):
-        e += (v - e) * (ka if v > e else kr)
-        env[i] = e
-    return x * 10 ** (np.minimum(0, (thresh - 10 * np.log10(env + 1e-12)) * (1 - 1 / ratio)) / 20)
-
-
 def speech_rms(x):
     """K-weighted RMS over the 20 ms frames that carry speech (within 30 dB of the loudest)."""
     k = kweight(x)
@@ -363,8 +375,8 @@ def speech_rms(x):
 
 
 GAINS = {'vibes': 1.0, 'bass': 0.6, 'drums': 0.85, 'fx': 1.0}
-VO_OVER_BED = 12.0  # dB (K-weighted) the voice sits above the ducked music while it speaks, at least per line
-DUCK_DB = {'vibes': 8, 'bass': 3, 'drums': 6, 'fx': 7, 'send': 7}
+VO_OVER_BED = 14.0  # dB (K-weighted) the voice sits above the ducked music while it speaks, at least per line (a weather host is up front)
+DUCK_DB = {'vibes': 11, 'bass': 8, 'drums': 9, 'fx': 10, 'send': 8}  # the bass ducks more than usual: it sat on the "l" of "travlt"
 CARVE_DB = 6  # extra dip of the 1.5-6 kHz band (where consonants live) in everything except the bass
 if VO:
     lines, spans = [], []
@@ -373,7 +385,7 @@ if VO:
         x = filt(x, 'highpass', 85)
         x = biquad(x, 'peak', 250, -2.0, 1.0)  # a little less boxy
         x = biquad(x, 'shelf', 4500, 2.5)      # presence, so it cuts through on phone speakers
-        x = compress(x / np.max(np.abs(x)), -20, 3.0)
+        # no compressor here, unlike the other ads: it blunted the "dr" of "driver" into an "l"
         x = fade(x * 0.1 / speech_rms(x), 0.005, 0.03)
         t0 = ln['at']
         lines.append((x, t0))

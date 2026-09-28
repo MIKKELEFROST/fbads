@@ -18,11 +18,11 @@ Billedet følger speaken. Tidspunkterne for replikkerne står i [`vo/da/cues.jso
 
 | Tid | Scene | Speak |
 | --- | --- | --- |
-| 0,0–2,0 s | "VEJRET for din kalender" over et Danmarkskort. Kortet trækker sig ud fra Jylland, og solene står op over et udtørret land. | "Her er vejret for kalenderen." |
-| 2,0–4,8 s | Jorden sprækker, varmen dirrer, og hver by viser 0 opgaver. | "Det er tørt. Ingen opgaver i sigte." |
-| 4,8–8,0 s | En varmfront med skiltet "NY HJEMMESIDE" driver ind fra vest med skyer og regn, og landet bliver grønt bag den. | "Men fra vest driver en ny hjemmeside ind over landet." |
-| 8,0–10,3 s | Skyer over byerne regner bookinger, og tællerne stiger: Aalborg 6, Aarhus 12, Esbjerg 5, Odense 8, København 21. | "Den giver et skybrud af kunder." |
-| 10,3–15,0 s | Kortet træder tilbage for femdagesudsigten, fuldt booket hver dag: "Prognose: travlt." Derefter logo, "sitecrew", "Hjemmesider, der fylder kalenderen." og "Få en gratis demo". | "Udsigten for resten af ugen: travlt." |
+| 0,0–2,1 s | "VEJRET for din kalender" over et Danmarkskort. Kortet trækker sig ud fra Jylland, og solene står op over et udtørret land. | "Her er udsigten for kalenderen." |
+| 2,1–4,9 s | Jorden sprækker, varmen dirrer, og hver by viser 0 opgaver. | "Det er tørt. Ingen opgaver i sigte." |
+| 4,9–8,0 s | En varmfront med skiltet "NY HJEMMESIDE" driver ind fra vest med skyer og regn, og landet bliver grønt bag den. | "Men fra vest driver en ny hjemmeside ind over landet." |
+| 8,0–10,4 s | Skyer over byerne regner bookinger, og tællerne stiger: Aalborg 6, Aarhus 12, Esbjerg 5, Odense 8, København 21. | "Den giver et skybrud af kunder." |
+| 10,4–15,0 s | Kortet træder tilbage for femdagesudsigten, fuldt booket hver dag: "Prognose: travlt." Derefter logo, "sitecrew", "Hjemmesider, der fylder kalenderen." og "Få en gratis demo". | "Udsigten for resten af ugen: travlt." |
 
 ## Sådan er den lavet
 
@@ -59,15 +59,21 @@ Hver replik er valgt blandt flere bud:
 - Stemmen er sammenlignet med de andre annoncer, så det lyder som samme speaker.
 
 Tre formuleringer er valgt, fordi talegenkenderen ellers ikke kunne bekræfte dem:
-- "for kalenderen" i stedet for "for din kalender": "din kalender" blev hver gang til "dine kalender".
+- "Her er udsigten for kalenderen." i stedet for "Her er vejret for din kalender.": "din kalender" blev hver gang
+  til "dine kalender", og "vejret" vippede mellem "vejret" og "vejet".
 - "et skybrud af kunder" i stedet for "kraftige byger af kunder": "byger" og "byer" udtales næsten ens.
 - "Udsigten" i stedet for "Prognosen": "prognosen" blev til "pronosen".
 
 Lyt den alligevel igennem, før annoncen går live.
 
-Musikken dukker sig under stemmen: 3–8 dB, og 6 dB ekstra i 1,5–6 kHz-båndet, hvor konsonanterne ligger. Stemmen
-ligger mindst 12 dB over musikken. Tidspunkterne står i sekunder i [`vo/da/cues.json`](vo/da/cues.json) (`at`), og
-`VO` og `WORD` øverst i `src/main.js` skal følge med, hvis en replik flyttes eller skiftes ud.
+Musikken spiller som et jingle under en vært. Mens værten taler, holder ride og stortromme pause, viskerne bliver
+bløde, og musikken dukker sig 8–11 dB med 6 dB ekstra i 1,5–6 kHz-båndet, hvor konsonanterne ligger. Under den
+sidste replik holder bandet helt pause og kommer ind igen på en akkord efter "travlt". Stemmen ligger mindst 14 dB
+over musikken. Der er ingen kompressor på stemmen i denne annonce, fordi den gjorde "dr" i "driver" til et "l".
+
+Tidspunkterne står i sekunder i [`vo/da/cues.json`](vo/da/cues.json) (`at`). `VO` og `WORD` øverst i
+`src/main.js` skal følge med, hvis en replik flyttes eller skiftes ud, for siden fortæller musikken, hvornår der
+tales.
 
 Sådan retter du en replik:
 

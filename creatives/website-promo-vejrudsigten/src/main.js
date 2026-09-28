@@ -4,10 +4,10 @@
  * The pictures follow the voice-over (vo/da/cues.json); VO[i] below are the lines' start times and lengths.
  *
  *   0.0  "VEJRET for din kalender" over a map of Denmark; suns rise over a parched country
- *   2.4  dry: every city shows 0 jobs, heat shimmer over the land
- *   5.1  a warm front labelled "NY HJEMMESIDE" drives in from the west; the land turns green behind it
- *   8.3  showers: clouds over the cities rain bookings and the counters climb
- *  10.8  the map makes way for the 5-day outlook — booked every day — "Prognose: travlt.", then sitecrew, the
+ *   2.2  dry: the ground cracks, heat shimmer, and every city shows 0 jobs on "Ingen opgaver"
+ *   5.0  a warm front labelled "NY HJEMMESIDE" drives in from the west; the land turns green behind it
+ *   8.1  a cloudburst: clouds over the cities rain bookings from "skybrud" and the counters climb
+ *  10.4  the map makes way for the 5-day outlook — booked every day — "Prognose: travlt.", then sitecrew, the
  *        tagline and the CTA
  *
  * The map lives in its own coordinates (screen pixels at zoom 1, see map.js) and has a camera for the slow
@@ -30,8 +30,8 @@
   // ---------------------------------------------------------------- timeline, locked to the voice-over
   // [start, length] of each spoken line in seconds (vo/da/cues.json `at`, and the lengths of vo/da/*.wav), and where
   // the words that the pictures react to begin inside their line (forced alignment with the Danish Røst ASR)
-  const VO = [[0.3, 1.5], [2.05, 2.47], [4.8, 2.86], [7.95, 2.0], [10.25, 1.86]];
-  const WORD = { ingen: 0.98, ny: 1.19, skybrud: 0.5, resten: 0.69, travlt: 1.42 };
+  const VO = [[0.3, 1.57], [2.2, 2.47], [5.0, 2.77], [8.1, 1.48], [10.35, 1.86]];
+  const WORD = { ingen: 0.98, ny: 1.14, skybrud: 0.51, resten: 0.69, travlt: 1.42 };
   const T = {
     intro: 0.0,
     suns: [VO[0][0] + 0.5, VO[0][0] + 0.8, VO[0][0] + 1.1],
@@ -777,7 +777,9 @@
     const out = [];
     const add = (t, type, extra = {}) => out.push(Object.assign({ t: +t.toFixed(4), type }, extra));
     add(0, 'intro');
+    VO.forEach(([at, len], i) => add(at, 'line', { i, until: +(at + len).toFixed(4) })); // the music leaves room for the voice
     T.suns.forEach((t0, i) => add(t0, 'sun', { i }));
+    add(T.dry, 'dry');
     CITIES.forEach((_, i) => add(T.zero + i * 0.1, 'zero', { i }));
     add(T.front0, 'front', { until: T.front1 });
     CITIES.forEach((_, i) => DROPS[i].forEach((d, k) => add(d.t0 + FALL, 'drop', { i, k })));
