@@ -6,7 +6,9 @@
  *   node tools/render.mjs --stills=0.3,2.5,9      # just save PNG stills at those times → out/stills/
  *   node tools/render.mjs --poster                # end-card thumbnail → out/poster-1080x1920.png
  *   node tools/render.mjs --cues                  # sound cues from the page → out/cues.json (make_audio.py reads it)
+ *   node tools/render.mjs --remux                 # only swap the audio of the already rendered video
  *
+ * Audio: out/soundtrack-da.wav (music + Danish voice-over) when it exists, else out/soundtrack.wav.
  * Motion blur: every frame is the average of several sub-frames spread over a 180° shutter —
  * --samples (default 4) normally, --samples-fast (default 16) inside the time ranges the page lists
  * in __meta.blur (its fastest moves). --samples=1 turns motion blur off for quick drafts.
@@ -38,7 +40,8 @@ const samplesFast = samples === 1 ? 1 : Math.max(samples, Number(args['samples-f
 const shutter = Number(args.shutter || 0.5);
 const workers = Math.max(1, Number(args.workers || Math.min(4, os.cpus().length)));
 const ffmpeg = process.env.FFMPEG || 'ffmpeg';
-const audio = args.audio === 'none' ? null : path.resolve(root, args.audio || 'out/soundtrack.wav');
+const voAudio = path.resolve(root, 'out/soundtrack-da.wav');
+const audio = args.audio === 'none' ? null : args.audio ? path.resolve(root, args.audio) : fs.existsSync(voAudio) ? voAudio : path.resolve(root, 'out/soundtrack.wav');
 const outFile = path.resolve(root, args.out || `out/${NAME}-${W}x${H}.mp4`);
 if (samplesFast % samples) throw new Error('--samples-fast must be a multiple of --samples');
 
@@ -94,6 +97,16 @@ try {
     fs.mkdirSync(path.dirname(f), { recursive: true });
     fs.writeFileSync(f, await page.shot());
     console.log(f);
+  } else if (args.remux) {
+    // new soundtrack, same pictures: copy the video stream, encode only the audio
+    const { DUR } = await (await openPage(browser, port)).evaluate(() => window.__meta);
+    if (!fs.existsSync(outFile)) throw new Error(`${outFile} does not exist yet, render it first`);
+    if (!audio || !fs.existsSync(audio)) throw new Error('no soundtrack to mux (run npm run audio)');
+    const tmp = outFile.replace(/\.mp4$/, '.remux.mp4');
+    await run(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'warning', '-i', outFile, '-i', audio, '-map', '0:v:0', '-map', '1:a:0',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-t', String(DUR), '-movflags', '+faststart', tmp]);
+    fs.renameSync(tmp, outFile);
+    console.log(`wrote ${outFile} (audio: ${path.relative(root, audio)})`);
   } else if (args.stills) {
     const dir = path.resolve(root, args.dir || 'out/stills');
     fs.mkdirSync(dir, { recursive: true });

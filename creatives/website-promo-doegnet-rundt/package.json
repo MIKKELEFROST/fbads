@@ -1,11 +1,12 @@
 {
   "name": "website-promo-doegnet-rundt",
   "private": true,
-  "description": "Illustrated night-to-morning ad (15 s, 9:16, Danish) for a company that builds websites for tradespeople",
+  "description": "Illustrated night-to-morning ad (15 s, 9:16) with Danish voice-over, for a company that builds websites for tradespeople",
   "type": "module",
   "scripts": {
-    "audio": "node tools/render.mjs --cues && python3 tools/make_audio.py",
+    "audio": "node tools/render.mjs --cues && python3 tools/make_audio.py && python3 tools/make_audio.py --vo=vo/da",
     "render": "node tools/render.mjs",
+    "remux": "node tools/render.mjs --remux",
     "poster": "node tools/render.mjs --poster",
     "stills": "node tools/render.mjs --stills=0.5,2.2,3.6,4.8,6.2,8.6,10.6,12.4,14.5",
     "preview": "node tools/preview.mjs"

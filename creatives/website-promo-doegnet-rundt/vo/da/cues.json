@@ -1,0 +1,12 @@
+{
+  "lang": "da",
+  "model": "CoRal-project/roest-v3-chatterbox-500m",
+  "temperature": 0.7,
+  "top_p": 0.95,
+  "lines": [
+    { "id": "l1", "file": "l1.wav", "at": 1.00, "text": "Du har fri.", "cfg": 0.3, "exaggeration": 0.35, "seed": 1 },
+    { "id": "l2", "file": "l2.wav", "at": 3.95, "text": "Du sover. Din hjemmeside gør ikke.", "cfg": 0.3, "seed": 5 },
+    { "id": "l3", "file": "l3.wav", "at": 9.98, "text": "God morgen. Fire nye opgaver.", "cfg": 0.3, "seed": 1, "gap": 0.6 },
+    { "id": "l4", "file": "l4.wav", "at": 12.30, "text": "Hjemmesider, der arbejder døgnet rundt.", "cfg": 0.3, "seed": 7 }
+  ]
+}
