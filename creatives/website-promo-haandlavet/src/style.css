@@ -1,0 +1,28 @@
+@font-face {
+  font-family: 'Archivo';
+  src: url(fonts/archivo.woff2) format('woff2');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url(fonts/inter.woff2) format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url(fonts/jetbrains-mono.woff2) format('woff2');
+  font-weight: 100 800;
+  font-style: normal;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #000; overflow: hidden; }
+#stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #000; transform-origin: 0 0; }
+#c { display: block; width: 1080px; height: 1920px; }
+
+/* preview player (only with ?preview) */
+.player { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: rgba(0, 0, 0, 0.8); color: #fff; font: 14px/1 monospace; z-index: 9999; }
+.player input[type='range'] { flex: 1; }
+.player button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 0; cursor: pointer; }
