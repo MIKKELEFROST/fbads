@@ -1,0 +1,17 @@
+{
+  "name": "website-promo-tvillingerne-tegneserie",
+  "private": true,
+  "description": "Comic-book version of the split-screen ad (15 s, 9:16, Danish) for a company that builds websites for tradespeople",
+  "type": "module",
+  "scripts": {
+    "audio": "node tools/render.mjs --cues && python3 tools/make_audio.py",
+    "render": "node tools/render.mjs",
+    "remux": "node tools/render.mjs --remux",
+    "poster": "node tools/render.mjs --poster",
+    "stills": "node tools/render.mjs --stills=0.0,0.3,0.6,1.2,1.75,2.4,3.3,3.9,4.6,5.9,6.6,7.2,7.9,8.6,9.6,10.3,11.0,11.6,12.4,13.4,14.6",
+    "preview": "node tools/preview.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
