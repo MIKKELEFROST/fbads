@@ -73,7 +73,7 @@
     crickets: [b(12.75), b(14.5), b(16.25)],
     h4: [b(18.5), b(19.75)], h4out: b(22.25),
     reveal: b(18.5), circle: b(20.25),
-    expand: b(22.5), logo: b(23.5), word: b(24), tag: b(25), cta: b(25.75),
+    expand: b(22.5), bam: b(22.5) + 0.28, logo: b(23.5), word: b(24), tag: b(25), cta: b(25.75),
   };
   const BLINKS = [0.95, 2.62, 4.18, 5.9, 7.42, 9.05, 10.3, 12.9, 14.2];
 
@@ -1005,6 +1005,7 @@
   const PAGE = { x0: 26, x1: 1054, y0: 118, y1: 1802, gut: 26, cy: 1000 };
   const Z0 = 1.28, CY0 = -760;        // the normal framing: knees up
   const ZR = 2.3;                      // the close-up on the phones
+  const ZE = 0.95, CYE = -984;         // the cover: the whole twin
   const GRIP = PH.h / 2 - 20;          // the hand holds the phone this far below its centre (phone units)
   const PHONE_Y = SHOW[1] - GRIP * 1.9; // rig y of the phone's centre when it is held up
   function layout(t) {
@@ -1018,9 +1019,9 @@
     const R = { side: 'R', x0: t < T.split ? PAGE.x0 : D + g / 2, x1: PAGE.x1, z: base.z, cx: base.cx, cy: base.cy };
     R.hc = t < T.split ? W / 2 : t < T.expand ? W / 2 + 269 * s : lerp(W / 2 + 269, W / 2, end);
     if (t >= T.expand) {
-      R.z = lerp(ZR, 0.95, end);
+      R.z = lerp(ZR, ZE, end);
       R.cx = lerp(SHOW[0], 0, end);
-      R.cy = lerp(PHONE_Y - 12, -984, end);
+      R.cy = lerp(PHONE_Y - 12, CYE, end);
     }
     const panels = [R];
     if (t >= T.split && D - g / 2 > PAGE.x0) {
@@ -1044,7 +1045,8 @@
     g.putImageData(img, 0, 0);
     return ctx.createPattern(cv, 'repeat');
   })();
-  // big Ben-Day dots that grow toward the edges of a panel, made once (centre at 540, 960)
+  // big Ben-Day dots that grow toward the edges of the page, made once (centre at 540, 960). They are printed on the
+  // page, so they stay put when the panels and the camera move
   const VIGNETTE = (() => {
     const cv = document.createElement('canvas');
     cv.width = W;
@@ -1073,21 +1075,24 @@
     c.fillStyle = GRAIN;
     c.fillRect(0, 0, W, H);
   }
-  // pop-art sunburst behind a panel's hero, turning slowly
-  function rays(c, x, y, t, colA, colB, n = 22) {
+  // pop-art sunburst behind a panel's hero, with Ben-Day dots on the dark rays. It stands still, like print: a
+  // turning one made every frame new for the video encoder and the file almost four times as big
+  function rays(c, x, y, colA, colB, n = 22) {
     c.fillStyle = C(colA);
     c.fillRect(-10, -10, W + 20, H + 20);
-    c.fillStyle = C(colB);
-    c.beginPath();
-    const rot = t * 0.06;
+    const dark = new Path2D();
+    const rot = -Math.PI / 2;
     for (let k = 0; k < n; k++) {
       const a0 = rot + (k * TAU) / n, a1 = a0 + TAU / (2 * n);
-      c.moveTo(x, y);
-      c.lineTo(x + Math.cos(a0) * 3000, y + Math.sin(a0) * 3000);
-      c.lineTo(x + Math.cos(a1) * 3000, y + Math.sin(a1) * 3000);
-      c.closePath();
+      dark.moveTo(x, y);
+      dark.lineTo(x + Math.cos(a0) * 3000, y + Math.sin(a0) * 3000);
+      dark.lineTo(x + Math.cos(a1) * 3000, y + Math.sin(a1) * 3000);
+      dark.closePath();
     }
-    c.fill();
+    c.fillStyle = C(colB);
+    c.fill(dark);
+    c.fillStyle = dots(c, C('#ff7a2b', 0.55), 12, 2.4);
+    c.fill(dark);
   }
   // comic focus lines converging on a point, re-inked 12 times a second
   function focusLines(c, x, y, t, seed, a) {
@@ -1104,30 +1109,26 @@
     c.fill();
   }
   function panelBackground(c, t, pn, grey) {
-    const headY = PAGE.cy + (RIG.headY - pn.cy) * pn.z;
-    const fx = pn.hc, fy = PAGE.cy + (PHONE_Y - pn.cy) * pn.z;
-    const focus = E.inOutCubic(prog(t, T.reveal, 0.35)) * (1 - E.inOutCubic(prog(t, T.expand + 0.2, 0.4)));
     // the flat, dull panel the left twin fades into
     c.fillStyle = C('#e9e3d6');
     c.fillRect(pn.x0, PAGE.y0, pn.x1 - pn.x0, PAGE.y1 - PAGE.y0);
-    const energy = 1 - 0.9 * grey;
-    if (focus < 1) {
-      c.save();
-      c.globalAlpha = energy * (1 - focus);
-      rays(c, pn.hc, headY, t, '#ffe27a', '#ffc53a');
-      c.fillStyle = dots(c, C('#ff7a2b', 0.55), 12, 2.4);
-      c.fillRect(pn.x0, PAGE.y0, pn.x1 - pn.x0, PAGE.y1 - PAGE.y0);
-      c.restore();
-    }
-    if (focus > 0) {
-      c.save();
-      c.globalAlpha = focus;
+    // Speed lines on plain paper from the reveal until the BAM, the sunburst before and after. They switch with a
+    // hard cut, like turning to a new panel.
+    if (t >= T.reveal && t < T.bam) {
       c.fillStyle = C(K.paper);
       c.fillRect(pn.x0, PAGE.y0, pn.x1 - pn.x0, PAGE.y1 - PAGE.y0);
-      focusLines(c, fx, fy, t, pn.side === 'L' ? 1 : 2, pn.side === 'L' ? 0.5 : 0.85);
+      focusLines(c, pn.hc, PAGE.cy + (PHONE_Y - pn.cy) * pn.z, t, pn.side === 'L' ? 1 : 2, pn.side === 'L' ? 0.5 : 0.85);
+    } else {
+      // The burst is centred where the twin's head settles, so it doesn't follow him and the camera around: at
+      // each twin's side after the split, and on the cover after the BAM.
+      const x = t < T.split || (t >= T.expand && pn.side === 'R') ? W / 2 : W / 2 + (pn.side === 'L' ? -269 : 269);
+      const y = t < T.expand ? PAGE.cy + (RIG.headY - CY0) * Z0 : PAGE.cy + (RIG.headY - CYE) * ZE;
+      c.save();
+      c.globalAlpha = 1 - 0.9 * grey;
+      rays(c, x, y, '#ffe27a', '#ffc53a');
       c.restore();
     }
-    c.drawImage(VIGNETTE, pn.hc - W / 2, headY + 280 - H / 2);
+    c.drawImage(VIGNETTE, 0, PAGE.cy - H / 2);
   }
 
   // ---------------------------------------------------------------- props in device pixels
@@ -1498,7 +1499,7 @@
         void tone;
       });
     }
-    sfx(c, S.push, 190, 980, t, T.expand + 0.28, T.expand + 0.95, { size: 150, rot: -0.2, seed: 53, shake: 12 });
+    sfx(c, S.push, 190, 980, t, T.bam, T.expand + 0.95, { size: 150, rot: -0.2, seed: 53, shake: 12 });
   }
   // the red marker ring around the right phone in the close-up
   function marker(c, t, R) {
@@ -1582,17 +1583,24 @@
   }
 
   // ---------------------------------------------------------------- one frame
+  // The drawing is animated on twos, like a comic come to life: at 60 fps every pose is held for two frames, and
+  // only the camera (the layout) moves on every frame. The held frames cost the video encoder next to nothing.
+  // The hold starts half a frame early, so a motion-blur shutter never straddles two poses.
+  function onTwos(t) {
+    return Math.min(DUR - 1e-6, (Math.floor((t * 60 + 0.5) / 2) * 2 + 0.5) / 60);
+  }
   function frame(t) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     paper(ctx);
     const L = layout(t);
-    for (const pn of L.panels) drawPanel(ctx, t, pn);
-    borders(ctx, t, L);
+    const tp = onTwos(t);
+    for (const pn of L.panels) drawPanel(ctx, tp, pn);
+    borders(ctx, tp, L);
     const R = L.panels[L.panels.length - 1];
-    marker(ctx, t, R);
-    pageText(ctx, t, L);
-    cover(ctx, t);
+    marker(ctx, tp, R);
+    pageText(ctx, tp, L);
+    cover(ctx, tp);
     return L;
   }
 
@@ -1627,7 +1635,7 @@
     add(T.reveal, 'reveal');
     add(T.circle, 'circle', 'R');
     add(T.expand, 'expand');
-    add(T.expand + 0.28, 'bam');
+    add(T.bam, 'bam');
     add(T.logo, 'logo');
     add(T.word, 'wordmark');
     add(T.tag, 'tag');
@@ -1639,10 +1647,8 @@
   const stage = document.getElementById('stage');
   const q = new URLSearchParams(location.search);
   const seek = (t) => frame(clamp(t, 0, DUR - 1e-6));
-  // fast moves get extra motion-blur samples
-  const BLUR = [[T.split - 0.05, T.split + 0.45], [T.toss - 0.2, T.catch + 0.2], [T.tools[0] - 0.05, T.tools[2] + 0.3], [T.sticker - 0.05, T.sticker + 0.2],
-    [T.ring, T.answer + 0.35], [T.shakeL, T.shakeL + 0.75], [T.tumble0, T.bump + 0.4], [T.reveal - 0.05, T.reveal + 0.6], [T.expand - 0.05, T.expand + 0.8],
-    [T.cta - 0.05, T.cta + 0.4]];
+  // the camera's fast moves get extra motion-blur samples (the drawing is on twos, so only the camera blurs)
+  const BLUR = [[T.split - 0.05, T.split + 0.45], [T.reveal - 0.05, T.reveal + 0.6], [T.expand - 0.05, T.expand + 0.8]];
   window.__meta = { W, H, DUR, BPM, format: 'portrait', blur: BLUR, poster: b(28), cues: cues() };
   window.__seek = seek;
   window.__debug = { T, layout, poseLeft, poseRight };

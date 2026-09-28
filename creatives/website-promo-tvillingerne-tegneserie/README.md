@@ -30,10 +30,12 @@ Alt er egen kode, uden AI-værktøjer, samples eller grafik udefra.
 - `src/main.js` tegner siden på et canvas. Hver gruppe af former, fx en arm, hovedet eller overkroppen, tegnes to
   gange: først som en fed sort silhuet og så i farve. Det giver en ren ydre kontur, mens de indre streger er
   tyndere. Skyggerne er cel-skyggelagt med rasterprikker (Ben-Day), som ligger fast på skærmen som trykte prikker.
-  Skovmandsskjorten er tern i to lag, skægstubbene er blå prikker, og lydordene er håndletterede: hvert bogstav
-  er drejet og skaleret en smule og har kontur og 3D-kant. Tvillingerne bevæger sig præcis som i den flade
-  version: skelettet, armene med invers kinematik og tidslinjen er de samme. Hvert billede er en ren funktion af
-  tiden.
+  Solstrålerne og de store prikker ude mod kanten er også "trykt" på siden, så de står stille, når kameraet
+  bevæger sig. Skovmandsskjorten er tern i to lag, skægstubbene er blå prikker, og lydordene er håndletterede:
+  hvert bogstav er drejet og skaleret en smule og har kontur og 3D-kant. Tvillingerne bevæger sig præcis som i den
+  flade version: skelettet, armene med invers kinematik og tidslinjen er de samme. Tegningen er animeret "on
+  twos" som en tegnefilm, så hver positur holdes i to billeder ved 60 fps, mens kameraet bevæger sig i hvert
+  billede. Hvert billede er en ren funktion af tiden.
 - `tools/make_audio.py` syntetiserer et 60'er-agtigt spion- og surfnummer i stereo:
   - twangy surfguitar (Karplus-Strong gennem en fjederklang), messingblæsere (båndbegrænsede savtakker med
     klangkurve), spionbas, trommer med toms og bækken, klokkespil
@@ -43,8 +45,8 @@ Alt er egen kode, uden AI-værktøjer, samples eller grafik udefra.
   Venstre tvilling høres i venstre kanal og højre i højre. Når den højre telefon ringer, forsvinder bandet fra
   venstre side, så der kun er fårekyllinger og vind. Når det højre panel smækker det venstre væk, fylder bandet
   begge sider igen. Lydene placeres ud fra `out/cues.json`, som siden selv eksporterer.
-- `tools/render.mjs` tegner billederne i headless Chromium med motion blur (4 delbilleder, 16 på de hurtigste
-  bevægelser) og pakker dem med ffmpeg.
+- `tools/render.mjs` tegner billederne i headless Chromium med motion blur på kamerabevægelserne (4 delbilleder,
+  16 på de hurtigste) og pakker dem med ffmpeg.
 
 Der er ingen speak. Lydordene og tekstboksene bærer historien, også uden lyd.
 

@@ -13,7 +13,7 @@
  * --samples (default 4) normally, --samples-fast (default 16) inside the time ranges the page lists
  * in __meta.blur (its fastest moves). --samples=1 turns motion blur off for quick drafts.
  *
- * Other options: --fps=60 --shutter=0.5 --workers=4 --crf=15 --audio=out/soundtrack.wav (--audio=none)
+ * Other options: --fps=60 --shutter=0.5 --workers=4 --crf=18 --audio=out/soundtrack.wav (--audio=none)
  *                --out=file.mp4 --frames=dir (keep/resume sub-frames there)
  * ffmpeg is taken from $FFMPEG or PATH.
  */
@@ -163,8 +163,9 @@ try {
     const argv = ['-y', '-hide_banner', '-loglevel', 'warning', '-framerate', String(fps * S), '-i', path.join(dir, '%07d.png')];
     const withAudio = audio && fs.existsSync(audio);
     if (withAudio) argv.push('-i', audio);
+    // the halftone dots are costly to encode: crf 18 and at most one keyframe per 10 s keep the file near 10 MB
     argv.push('-vf', vf.join(','), '-r', String(fps), '-t', String(meta.DUR),
-      '-c:v', 'libx264', '-preset', 'slow', '-crf', String(args.crf || 15), '-profile:v', 'high', '-tune', 'animation',
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', String(args.crf || 18), '-g', String(fps * 10), '-profile:v', 'high', '-tune', 'animation',
       '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv');
     if (withAudio) argv.push('-c:a', 'aac', '-b:a', '256k', '-ar', '48000');
     argv.push('-movflags', '+faststart', outFile);
