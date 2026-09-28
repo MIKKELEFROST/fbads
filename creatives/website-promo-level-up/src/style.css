@@ -1,0 +1,11 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #000; overflow: hidden; }
+
+/* 135x240 frame buffer shown at 8x with nearest-neighbour scaling */
+#stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #000; transform-origin: 0 0; }
+#screen { display: block; width: 1080px; height: 1920px; image-rendering: pixelated; }
+
+/* preview player (only with ?preview) */
+.player { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: rgba(0, 0, 0, 0.8); color: #fff; font: 14px/1 monospace; z-index: 9999; }
+.player input[type='range'] { flex: 1; }
+.player button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 0; cursor: pointer; }
