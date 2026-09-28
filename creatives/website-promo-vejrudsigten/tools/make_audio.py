@@ -442,8 +442,9 @@ mixed = filt(mixed, 'lowpass', 16000)
 mixed[:, -int(0.35 * SR):] *= np.linspace(1, 0, int(0.35 * SR)) ** 1.5
 
 
-def limit(x, ceiling=0.86, look=0.004, release=0.06):
-    """Look-ahead peak limiter: gain drops before each peak, recovers smoothly."""
+def limit(x, ceiling=0.84, look=0.004, release=0.06):
+    """Look-ahead peak limiter: gain drops before each peak, recovers smoothly. The ceiling sits a little lower than
+    in most of the other ads: the vibraphone's attacks would otherwise reach -0.7 dBTP after AAC."""
     from scipy.ndimage import minimum_filter1d, uniform_filter1d
     L = int(look * SR)
     g = np.minimum(1, ceiling / np.maximum(np.max(np.abs(x), axis=0), 1e-9))
