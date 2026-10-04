@@ -14,6 +14,44 @@ const BUILD = () => {
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const hash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
+  // ---------- format: 16:9 (standard) eller 9:16 (index.html?f=916) ----------
+  const V = document.documentElement.classList.contains('v');
+  const SW = V ? 1080 : 1920, SH = V ? 1920 : 1080;
+  const CX = SW / 2, CY = SH / 2;
+  const LAY = V ? {
+    bar: { x: 90, w: 900 }, acOrigin: '50% -67px',
+    serp2: { rotateY: 0, rotateX: 12, transformOrigin: '50% 0%' },
+    gadsShrink: { y: -60, scale: 0.6 },
+    serp3: { rotateY: 0, rotateX: 10, transformOrigin: '50% 0%' },
+    cursor: { from: [1000, 700], to: [783, 53] },
+    iris: '50% 58%',
+    phone: { rotateY: -10, rotateX: 5, rotateZ: 0, scale: 0.82, transformOrigin: '50% 0%', fromY: -35 },
+    logoBarY: 910,
+  } : {
+    bar: { x: 440, w: 1040 }, acOrigin: '50% -64px',
+    serp2: { rotateY: 16, rotateX: 5, transformOrigin: '0% 50%' },
+    gadsShrink: { y: -62, scale: 0.42 },
+    serp3: { rotateY: -15, rotateX: 4, transformOrigin: '100% 50%' },
+    cursor: { from: [900, 560], to: [583, 53] },
+    iris: '71% 50%',
+    phone: { rotateY: -18, rotateX: 5, rotateZ: 2, scale: 1, transformOrigin: '50% 50%', fromY: -45 },
+    logoBarY: 488,
+  };
+  if (V) {
+    // elementer med inline-placering i 16:9-layoutet
+    [150, 1600].forEach((y, k) => gsap.set(`#mq${k + 1}`, { top: y }));
+    $$('#serp2 .card').forEach((c, k) => gsap.set(c, { top: 136 + 132 * k }));
+    $$('#wipe i').forEach((b, k) => gsap.set(b, { top: k * 480, height: 481 }));
+    $$('.panel').forEach((p) => $$('.bgw', p).forEach((b, k) => gsap.set(b, { top: [170, 1470][k] })));
+    const chart = $('#chart');
+    chart.setAttribute('width', 1080); chart.setAttribute('height', 1920); chart.setAttribute('viewBox', '0 0 1080 1920');
+    const d = 'M0 1460 C 120 1450, 200 1420, 290 1425 S 450 1380, 540 1360 S 680 1320, 760 1270 S 900 1190, 960 1110 S 1050 960, 1080 900';
+    $('#cpath').setAttribute('d', d);
+    $('#carea').setAttribute('d', d + ' L1080 1920 L0 1920 Z');
+    $('#cgrid').setAttribute('d', 'M0 900H1080M0 1050H1080M0 1200H1080M0 1350H1080M0 1500H1080');
+    $('#cclipr').setAttribute('height', 1920);
+  }
+
   // ---------- tekst-split ----------
   const wrap = (txt) => {
     const m = document.createElement('span'); m.className = 'm';
@@ -84,18 +122,18 @@ const BUILD = () => {
 
   // fire Google-prikker → søgefeltet
   const dots = $$('#dots i');
-  dots.forEach((d, k) => gsap.set(d, { left: 873 + 58 * k - 18, scale: 0 }));
+  dots.forEach((d, k) => gsap.set(d, { left: CX - 87 + 58 * k - 18, scale: 0 }));
   dots.forEach((d, k) => { ft(d, { scale: 0 }, { scale: 1, duration: 0.5, ease: 'back.out(2.4)' }, 0.06 + k * 0.07); sfx(0.06 + k * 0.07, 'pop', { p: k }); });
   dots.forEach((d, k) => {
     tl.to(d, { y: -36, duration: 0.17, ease: 'power2.out' }, 0.42 + k * 0.07);
     tl.to(d, { y: 0, duration: 0.2, ease: 'power2.in' }, 0.59 + k * 0.07);
   });
-  gsap.set('#sbar1', { width: 104, left: 908, opacity: 0, scale: 0.4 });
+  gsap.set('#sbar1', { width: 104, left: CX - 52, opacity: 0, scale: 0.4 });
   gsap.set(['#sbar1 .mag', '#sbar1 .q', '#sd1'], { opacity: 0 });
   tl.to('#sbar1', { opacity: 1, scale: 1, duration: 0.35, ease: 'back.out(1.8)' }, 0.92);
-  tl.to('#sbar1', { width: 1040, left: 440, duration: 0.62, ease: 'expo.inOut' }, 1.0);
+  tl.to('#sbar1', { width: LAY.bar.w, left: LAY.bar.x, duration: 0.62, ease: 'expo.inOut' }, 1.0);
   sfx(0.98, 'whoosh', { d: 0.6, f: 0.8 });
-  dots.forEach((d, k) => tl.to(d, { x: 499 - 37 * k, scale: 0.389, duration: 0.6, ease: 'expo.inOut' }, 1.02 + k * 0.03));
+  dots.forEach((d, k) => tl.to(d, { x: LAY.bar.x + LAY.bar.w - CX - 21 - 37 * k, scale: 0.389, duration: 0.6, ease: 'expo.inOut' }, 1.02 + k * 0.03));
   tl.set('#dots', { opacity: 0 }, 1.72);
   tl.set('#sd1', { opacity: 1 }, 1.72);
   tl.to(['#sbar1 .mag', '#sbar1 .q'], { opacity: 1, duration: 0.3, ease: 'power1.out' }, 1.38);
@@ -111,7 +149,7 @@ const BUILD = () => {
   hooks.push((t) => { $('#live i').style.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(t * 7)); });
 
   // autoudfyld
-  gsap.set('#ac', { transformOrigin: '50% -64px' });
+  gsap.set('#ac', { transformOrigin: LAY.acOrigin });
   enter('#ac', { clipPath: 'inset(0% 0% 100% 0% round 28px)', y: -14, opacity: 0 },
     { clipPath: 'inset(0% 0% 0% 0% round 28px)', y: 0, opacity: 1, duration: 0.5 }, 2.62);
   enter('#ac .row', { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.4, stagger: 0.05 }, 2.66);
@@ -133,7 +171,7 @@ const BUILD = () => {
   // S2 · 3.30–5.86 · "Finder de dig – eller din konkurrent?"
   // =========================================================
   show('#s2', 3.3);
-  gsap.set('#serp2', { transformPerspective: 1800, rotateY: 16, rotateX: 5, transformOrigin: '0% 50%' });
+  gsap.set('#serp2', { transformPerspective: 1800, ...LAY.serp2 });
   enter('#serp2', { opacity: 0, scale: 0.8, x: -90 }, { opacity: 1, scale: 1, x: 0, duration: 0.85 }, 3.36);
   enter('#serp2 .sbar', { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, 3.4);
   enter('#serp2 .tabs', { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'power1.out' }, 3.5);
@@ -177,7 +215,7 @@ const BUILD = () => {
     sfx(w('l3', wi) - 0.05, 'pop', { p: k + 1 });
   });
   gsap.set('#gads', { transformOrigin: '0% 0%' });
-  tl.to('#gads', { y: -62, scale: 0.42, duration: 0.45, ease: 'expo.inOut' }, 7.24);
+  tl.to('#gads', { ...LAY.gadsShrink, duration: 0.45, ease: 'expo.inOut' }, 7.24);
 
   rise(I('#s3l .star'), w('l3', 7) - 0.07, { st: 0.05 });
   gsap.set('#s3l .ov', { transformOrigin: '0% 55%' });
@@ -188,7 +226,7 @@ const BUILD = () => {
   enter('#s3l .cap .mk', { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: 'expo.inOut' }, w('l3', 13) + 0.04);
   tl.to('#s3l .cap .hi .i', { color: '#fff', duration: 0.25, ease: 'power1.out' }, w('l3', 13) + 0.2);
 
-  gsap.set('#serp3', { transformPerspective: 1800, rotateY: -15, rotateX: 4, transformOrigin: '100% 50%' });
+  gsap.set('#serp3', { transformPerspective: 1800, ...LAY.serp3 });
   enter('#serp3', { opacity: 0, x: 140 }, { opacity: 1, x: 0, duration: 0.9 }, 5.92);
   enter('#serp3 .card', { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.06 }, 5.98);
   hooks.push((t) => gsap.set('#serp3', { y: Math.sin(t * 1.2 + 1) * 7 }));
@@ -205,9 +243,9 @@ const BUILD = () => {
   sfx(w('l3', 9) + 0.05, 'ding');
 
   // markør klikker "Ring nu"
-  gsap.set('#cursor', { x: 900, y: 560, opacity: 0, transformOrigin: '20% 10%' });
+  gsap.set('#cursor', { x: LAY.cursor.from[0], y: LAY.cursor.from[1], opacity: 0, transformOrigin: '20% 10%' });
   tl.to('#cursor', { opacity: 1, duration: 0.2, ease: 'none' }, 8.5);
-  tl.to('#cursor', { x: 583, y: 53, duration: 0.8, ease: 'power3.inOut' }, 8.5);
+  tl.to('#cursor', { x: LAY.cursor.to[0], y: LAY.cursor.to[1], duration: 0.8, ease: 'power3.inOut' }, 8.5);
   const CLICK = 9.36;
   tl.to('#cursor', { scale: 0.8, duration: 0.07, ease: 'power2.out' }, CLICK);
   tl.to('#cursor', { scale: 1, duration: 0.2, ease: 'back.out(3)' }, CLICK + 0.08);
@@ -252,8 +290,8 @@ const BUILD = () => {
   // S5 · 11.92–15.95 · "Flere opkald. Flere tilbud. Flere opgaver."
   // =========================================================
   show('#s5', 11.92);
-  gsap.set('#s5', { clipPath: 'circle(0% at 71% 50%)' });
-  tl.to('#s5', { clipPath: 'circle(150% at 71% 50%)', duration: 0.55, ease: 'expo.inOut' }, 11.92);
+  gsap.set('#s5', { clipPath: `circle(0% at ${LAY.iris})` });
+  tl.to('#s5', { clipPath: `circle(150% at ${LAY.iris})`, duration: 0.55, ease: 'expo.inOut' }, 11.92);
   sfx(11.9, 'whoosh', { d: 0.6, f: 0.7 });
   hide('#s4', 12.5);
   tl.to('#s5bg', { opacity: 0, duration: 0.5, ease: 'power1.inOut' }, 12.5);
@@ -284,8 +322,9 @@ const BUILD = () => {
   [w('f2', 0), w('f3', 0)].forEach((t) => ft('#flere', { scale: 1.06 }, { scale: 1, duration: 0.5 }, t));
   [w('f1', 1), w('f2', 1), w('f3', 1)].forEach((t) => { punch(t - 0.04, 1.025, 0.5); sfx(t - 0.05, 'hit', { g: 0.5 }); });
 
-  gsap.set('#phonewrap', { transformPerspective: 1800, rotateY: -18, rotateX: 5, rotateZ: 2 });
-  enter('#phonewrap', { y: 180, opacity: 0, rotateY: -45 }, { y: 0, opacity: 1, rotateY: -18, duration: 0.95 }, 11.98);
+  const { fromY, ...phoneT } = LAY.phone;
+  gsap.set('#phonewrap', { transformPerspective: 1800, ...phoneT });
+  enter('#phonewrap', { y: 180, opacity: 0, rotateY: fromY }, { y: 0, opacity: 1, rotateY: phoneT.rotateY, duration: 0.95 }, 11.98);
   hooks.push((t) => gsap.set('#phone', { y: Math.sin(t * 1.6) * 9 }));
   tl.to('#phone', {
     keyframes: [3, -3, 3, -3, 2.5, -2.5, 2, -2, 0].map((r) => ({ rotate: r, duration: 0.05 })), ease: 'none',
@@ -309,17 +348,17 @@ const BUILD = () => {
   ft('#run', { x: 360 }, { x: -1100, duration: 4, ease: 'none' }, 12.0);
 
   // ud: alt samles mod midten
-  tl.to(['#s5l', '#phonewrap', '#ticker', '#chart'], { scale: 0.9, opacity: 0, filter: 'blur(14px)', duration: 0.45, ease: 'power3.in', stagger: 0.03 }, 15.45);
+  tl.to(['#s5l', '#phonewrap', '#ticker', '#chart'], { scale: (i, el) => gsap.getProperty(el, 'scale') * 0.9, opacity: 0, filter: 'blur(14px)', duration: 0.45, ease: 'power3.in', stagger: 0.03 }, 15.45);
   hide('#s5', 16.0);
 
   // =========================================================
   // S6 · 15.45–20.00 · "O M N. Online Marketing Nu."
   // =========================================================
   const bars = $$('#bars i');
-  const corners = [[-60, -60], [1980, -60], [1980, 1140], [-60, 1140]];
+  const corners = [[-60, -60], [SW + 60, -60], [SW + 60, SH + 60], [-60, SH + 60]];
   bars.forEach((b, k) => gsap.set(b, { left: corners[k][0] - 18, top: corners[k][1] - 18, width: 36, height: 36, borderRadius: 18, visibility: 'hidden' }));
   tl.set(bars, { visibility: 'visible' }, 15.45);
-  bars.forEach((b, k) => tl.to(b, { left: 960 + (k - 1.5) * 58 - 18, top: 540 - 18, duration: 0.5, ease: 'expo.in' }, 15.45 + k * 0.02));
+  bars.forEach((b, k) => tl.to(b, { left: CX + (k - 1.5) * 58 - 18, top: CY - 18, duration: 0.5, ease: 'expo.in' }, 15.45 + k * 0.02));
   sfx(15.3, 'riser', { d: 0.65 });
   const IMPACT = 15.98;
   show('#s6', 15.9);
@@ -329,8 +368,8 @@ const BUILD = () => {
   tl.to('#flash', { opacity: 0, duration: 0.5, ease: 'power2.out' }, IMPACT + 0.05);
   ['#bu1', '#bu2'].forEach((b, k) => enter(b, { scale: 0, opacity: 1 }, { scale: 2.6 + k, opacity: 0, duration: 0.9 + k * 0.2, ease: 'expo.out' }, IMPACT + k * 0.06));
 
-  const BAR_Y = 488;
-  bars.forEach((b, k) => tl.to(b, { left: 739 + 114 * k, top: BAR_Y, width: 100, height: 18, borderRadius: 9, duration: 0.7, ease: 'expo.inOut' }, 16.2 + k * 0.04));
+  const BAR_Y = LAY.logoBarY;
+  bars.forEach((b, k) => tl.to(b, { left: CX - 221 + 114 * k, top: BAR_Y, width: 100, height: 18, borderRadius: 9, duration: 0.7, ease: 'expo.inOut' }, 16.2 + k * 0.04));
   const logoL = I('#logo');
   [0, 1, 2].forEach((k) => {
     ft(logoL[k], { yPercent: 115, rotate: 8, scale: 1.2 }, { yPercent: 0, rotate: 0, scale: 1, duration: 0.8, ease: 'expo.out' }, w('l6', k) - 0.05);

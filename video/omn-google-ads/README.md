@@ -1,7 +1,12 @@
 # OMN – Google Ads til håndværkere (20 sek. motion graphics)
 
-Færdig film: [`out/omn-google-ads-20s-1080p.mp4`](out/omn-google-ads-20s-1080p.mp4) – 1920×1080, 30 fps,
-H.264 + AAC, 20,0 sek., -14 LUFS (klar til Meta/YouTube/LinkedIn).
+Færdige film (20,0 sek., 30 fps, H.264 + AAC, -14 LUFS, samme speak og lyd):
+
+- [`out/omn-google-ads-20s-1080p.mp4`](out/omn-google-ads-20s-1080p.mp4) – 16:9, 1920×1080 (YouTube, LinkedIn, feed)
+- [`out/omn-google-ads-20s-9x16.mp4`](out/omn-google-ads-20s-9x16.mp4) – 9:16, 1080×1920 (Reels, Stories, TikTok, Shorts)
+
+9:16-versionen er samme animation med et lodret layout (`index.html?f=916`). Tekst og vigtige
+elementer ligger mellem ca. 250 og 1500 px fra toppen, så de ikke dækkes af appens knapper.
 
 ## Manus (dansk speak)
 
@@ -42,6 +47,10 @@ ffmpeg -framerate 60 -i /tmp/frames/f%05d.png -i audio/mix.wav \
   -filter_complex "[0:v]tmix=frames=2:weights='1 1',fps=30,format=yuv420p[v]" -map "[v]" -map 1:a \
   -c:v libx264 -preset slow -crf 16 -tune animation -movflags +faststart -c:a aac -b:a 256k -shortest \
   out/omn-google-ads-20s-1080p.mp4
+
+# 9:16: samme to trin med --format 916 (lyden genbruges)
+node tools/render.cjs --format 916 --out /tmp/vframes --fps 60 --workers 4
+ffmpeg ... -i /tmp/vframes/f%05d.png ... out/omn-google-ads-20s-9x16.mp4
 ```
 
 Forhåndsvisning i browser: server mappen (`npx serve .`) og åbn `index.html?play`, eller

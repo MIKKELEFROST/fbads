@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>OMN – Google Ads til håndværkere</title>
 <link rel="stylesheet" href="fonts/local.css">
+<script>if (new URLSearchParams(location.search).get('f') === '916') document.documentElement.classList.add('v');</script>
 <style>
 :root{
   --blue:#4285F4; --red:#EA4335; --yellow:#FBBC05; --green:#34A853;
@@ -185,6 +186,44 @@ svg{display:block}
 #ripple{position:absolute;width:200px;height:200px;margin:-100px 0 0 -100px;border-radius:50%;background:#EDF3FE;box-shadow:0 0 0 3px rgba(66,133,244,.35)}
 #flash{background:#EEF3FE;opacity:0}
 #vig{background:radial-gradient(1500px 1000px at 50% 50%,transparent 60%,rgba(17,19,24,.05) 100%)}
+
+/* ---------- 9:16 (index.html?f=916 → html.v) ---------- */
+html.v,html.v body{width:1080px;height:1920px}
+html.v #hud .abs:not(#prog){display:none}
+html.v #prog{width:1080px}
+html.v .blob.r{left:300px}
+html.v .blob.y{left:240px;top:1180px}
+html.v .blob.g{top:1000px}
+html.v #wipe i{width:1080px}
+html.v .mqrow{font-size:170px}
+html.v #h1{width:1080px;top:540px;padding:0 70px;font-size:100px;line-height:1.06}
+html.v #live{left:90px;top:822px}
+html.v #sbar1{top:880px;height:110px}
+html.v #ac{left:90px;top:1002px;width:900px}
+html.v #dots i{top:917px}
+html.v #serp2{left:90px;top:1000px;width:900px;height:760px}
+html.v #serp2 .sbar{width:900px;height:72px}
+html.v #serp2 .tabs{top:90px}
+html.v #serp2 .card{width:900px;height:120px}
+html.v #s2t{left:90px;top:300px;width:900px}
+html.v #s3l{left:90px;width:900px;height:1920px}
+html.v #gads{top:250px}
+html.v #s3l .star{top:450px}
+html.v #s3l .ov{top:515px}
+html.v #s3l .cap{top:760px}
+html.v #serp3{left:90px;top:900px;width:900px}
+html.v #serp3 .card{width:900px}
+html.v .panel .word{font-size:200px}
+html.v .panel .bgw{font-size:260px}
+html.v #s5l{left:90px}
+html.v #slot{width:940px}
+html.v #phonewrap{left:320px;top:760px}
+html.v #ticker{top:1560px;width:1080px}
+html.v #logo{width:1080px;top:600px}
+html.v #oname{width:1080px;top:1034px}
+html.v #tag{width:1080px;top:1150px}
+html.v #sbar6{left:140px;top:1232px}
+html.v #burst{left:540px;top:960px}
 </style>
 </head>
 <body>
@@ -306,9 +345,9 @@ svg{display:block}
           <clipPath id="cclip"><rect id="cclipr" x="0" y="0" width="0" height="1080"/></clipPath>
         </defs>
         <g stroke="rgba(17,19,24,.07)" stroke-width="1">
-          <path d="M0 300H1920M0 450H1920M0 600H1920M0 750H1920M0 900H1920"/>
+          <path id="cgrid" d="M0 300H1920M0 450H1920M0 600H1920M0 750H1920M0 900H1920"/>
         </g>
-        <path clip-path="url(#cclip)" fill="url(#cfill)" d="M0 930 C 160 920, 260 880, 380 890 S 600 820, 720 800 S 900 760, 1020 700 S 1230 640, 1340 560 S 1560 470, 1680 380 S 1840 290, 1920 250 L1920 1080 L0 1080 Z"/>
+        <path id="carea" clip-path="url(#cclip)" fill="url(#cfill)" d="M0 930 C 160 920, 260 880, 380 890 S 600 820, 720 800 S 900 760, 1020 700 S 1230 640, 1340 560 S 1560 470, 1680 380 S 1840 290, 1920 250 L1920 1080 L0 1080 Z"/>
         <path id="cpath" fill="none" stroke="url(#cline)" stroke-width="6" stroke-linecap="round" d="M0 930 C 160 920, 260 880, 380 890 S 600 820, 720 800 S 900 760, 1020 700 S 1230 640, 1340 560 S 1560 470, 1680 380 S 1840 290, 1920 250"/>
         <circle id="chead" r="11" fill="#4285F4" stroke="#fff" stroke-width="4"/>
         <circle id="chalo" r="30" fill="none" stroke="#4285F4" stroke-opacity=".5" stroke-width="2"/>
