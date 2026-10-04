@@ -43,13 +43,13 @@ const BUILD = () => {
   const rise = (els, t, o = {}) => ft(els, { yPercent: 115, rotate: o.rot ?? 6 },
     { yPercent: 0, rotate: 0, duration: o.d ?? 0.7, ease: o.ease ?? 'expo.out', stagger: o.st ?? 0.035 }, t);
   const punch = (t, s = 1.04, d = 0.6) => ft('#punch', { scale: s }, { scale: 1, duration: d, ease: 'expo.out' }, t);
-  const shake = (t, a = 12) => tl.to('#shake', {
+  const shake = (t, amp = 12) => { const a = amp * 0.7; return tl.to('#shake', {
     keyframes: [
       { x: a, y: -a * 0.6, duration: 0.035 }, { x: -a * 0.8, y: a * 0.5, duration: 0.035 },
       { x: a * 0.5, y: -a * 0.3, duration: 0.04 }, { x: -a * 0.25, y: a * 0.15, duration: 0.045 },
       { x: 0, y: 0, duration: 0.06 },
     ], ease: 'none',
-  }, t);
+  }, t); };
   const slam = (el, t, o = {}) => {
     gsap.set(I(el), { yPercent: 0 });
     enter(el, { opacity: 0, scale: o.s ?? 1.55, filter: 'blur(22px)' },
@@ -146,14 +146,14 @@ const BUILD = () => {
   slam('#s2t .b', w('l2', 2) - 0.07);
   punch(w('l2', 2) - 0.03, 1.045); shake(w('l2', 2), 10); sfx(w('l2', 2) - 0.03, 'hit', { g: 0.8 });
   const you2 = $('#serp2 .you');
-  tl.to(you2, { boxShadow: '0 0 0 5px #4285F4, 0 20px 70px rgba(66,133,244,.6)', duration: 0.25, ease: 'power2.out' }, w('l2', 2));
+  tl.to(you2, { boxShadow: '0 0 0 5px #4285F4, 0 20px 60px rgba(66,133,244,.3)', duration: 0.25, ease: 'power2.out' }, w('l2', 2));
   rise(I('#s2t .c'), w('l2', 3) - 0.05, { st: 0.06 });
   rise(I('#s2t .d'), w('l2', 5) - 0.1, { st: 0.03, d: 0.55, rot: 12 });
   tl.to('#s2t .b', { opacity: 0.22, duration: 0.4, ease: 'power2.out' }, w('l2', 5));
   punch(w('l2', 5) - 0.02, 1.03); shake(w('l2', 5), 8); sfx(w('l2', 5) - 0.03, 'hit', { g: 0.65 });
   tl.to(you2, { y: 260, rotate: 8, opacity: 0.12, duration: 0.7, ease: 'power3.in' }, w('l2', 5) - 0.05);
   sfx(w('l2', 5), 'fall');
-  tl.to('#serp2 .card.k', { boxShadow: '0 0 0 4px rgba(234,67,53,.95), 0 20px 70px rgba(234,67,53,.5)', duration: 0.3, stagger: 0.05, ease: 'power2.out' }, w('l2', 5) + 0.05);
+  tl.to('#serp2 .card.k', { boxShadow: '0 0 0 4px rgba(234,67,53,.95), 0 20px 60px rgba(234,67,53,.25)', duration: 0.3, stagger: 0.05, ease: 'power2.out' }, w('l2', 5) + 0.05);
 
   // overgang: fire Google-farvebånd
   const bands = $$('#wipe i');
@@ -186,6 +186,7 @@ const BUILD = () => {
   const capw = I('#s3l .cap');
   [10, 11, 12, 13].forEach((wi, k) => rise(capw[k], w('l3', wi) - 0.05, { d: 0.55 }));
   enter('#s3l .cap .mk', { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: 'expo.inOut' }, w('l3', 13) + 0.04);
+  tl.to('#s3l .cap .hi .i', { color: '#fff', duration: 0.25, ease: 'power1.out' }, w('l3', 13) + 0.2);
 
   gsap.set('#serp3', { transformPerspective: 1800, rotateY: -15, rotateX: 4, transformOrigin: '100% 50%' });
   enter('#serp3', { opacity: 0, x: 140 }, { opacity: 1, x: 0, duration: 0.9 }, 5.92);
@@ -324,7 +325,7 @@ const BUILD = () => {
   show('#s6', 15.9);
   sfx(IMPACT, 'impact');
   punch(IMPACT, 1.07, 0.9); shake(IMPACT, 16);
-  enter('#flash', { opacity: 0 }, { opacity: 0.2, duration: 0.05, ease: 'none' }, IMPACT);
+  enter('#flash', { opacity: 0 }, { opacity: 0.45, duration: 0.05, ease: 'none' }, IMPACT);
   tl.to('#flash', { opacity: 0, duration: 0.5, ease: 'power2.out' }, IMPACT + 0.05);
   ['#bu1', '#bu2'].forEach((b, k) => enter(b, { scale: 0, opacity: 1 }, { scale: 2.6 + k, opacity: 0, duration: 0.9 + k * 0.2, ease: 'expo.out' }, IMPACT + k * 0.06));
 
@@ -353,7 +354,7 @@ const BUILD = () => {
   });
 
   // =========================================================
-  // Globalt: HUD, kamera, baggrund, grain
+  // Globalt: HUD, kamera, baggrund
   // =========================================================
   tl.to('#hud .abs:not(#prog)', { opacity: 0, duration: 0.4, ease: 'power1.in' }, 15.55);
   const scenes = [[0, '01 / SØGNINGEN'], [3.3, '02 / KONKURRENTEN'], [5.86, '03 / GOOGLE ADS'], [9.99, '04 / FAGENE'], [11.92, '05 / RESULTATER'], [15.9, '06 / OMN']];
@@ -367,8 +368,6 @@ const BUILD = () => {
     gsap.set('#cam', { x: Math.sin(t * 0.7) * 10, y: Math.cos(t * 0.55) * 7, rotate: Math.sin(t * 0.4) * 0.3, scale: z });
     gsap.set('#dotgrid', { x: -((t * 18) % 48), y: -((t * 11) % 48) });
     $$('.blob').forEach((b, k) => gsap.set(b, { x: Math.sin(t * 0.35 + k * 1.7) * 90, y: Math.cos(t * 0.3 + k * 2.1) * 70 }));
-    const f = Math.floor(t * 30);
-    $('#grain').style.transform = `translate(${Math.floor(hash(f) * 200 - 100)}px, ${Math.floor(hash(f + 99) * 200 - 100)}px)`;
   });
 
   // ripple-centrum: mål "Ring nu"-knappens skærmposition i klik-øjeblikket
