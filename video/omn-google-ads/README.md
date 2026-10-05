@@ -29,18 +29,25 @@ Scenerne og tiderne er de samme i alle versioner; speak og skærmtekst skifter.
 ### v3 og v4 – ét fag i fokus
 
 v3 (maler) og v4 (tømrer) har samme manus, så de kan testes direkte mod hinanden; kun faget
-skifter. De er også roligere end v1/v2 (`mood: 'soft'` i `copy.js`): ingen stortromme eller
-bas-slag på nøgleordene, men blød musik med pad, klokker og shaker, bløde toner som anslag og
-ingen kamerarystelser. Søgning, autoudfyld, søgeresultater, opgaverne i scene 4, notifikationen, tickeren og
+skifter. Søgning, autoudfyld, søgeresultater, opgaverne i scene 4, notifikationen, tickeren og
 slutkortet følger faget.
+
+De er også roligere og mere flydende end v1/v2 (`mood: 'soft'` i `copy.js`):
+
+- Speaken er hele sætninger i roligt tempo i stedet for enkeltord ("Vægge og lofter, vinduer og
+  facader." frem for "Vægge. Lofter. …"), med naturlige pauser mellem sætningerne.
+- Musikken har ingen stortromme eller bas-slag (pad, klokker, blød bas og shaker), og
+  nøgleordene får bløde toner i stedet for brag.
+- Billedet har ingen kamerarystelser og svagere zoom-slag. Teksten glider blødere ind, fag-panelerne
+  glider alle ind fra højre, og hele billedet har en langsom, konstant zoom-bølge.
 
 | Tid | v3 – maler | v4 – tømrer |
 |---|---|---|
-| 0–3,3 | Er du maler? Dine næste kunder søger på Google. | Er du tømrer? Dine næste kunder søger på Google. |
+| 0–3,3 | Er du maler? Dine kunder søger på Google. | Er du tømrer? (resten samme) |
 | 3,3–5,9 | Men lige nu går opgaven til din konkurrent. | (samme) |
-| 5,9–10 | Med Google Ads fra OMN kommer du øverst – og det er dig, de ringer til. | (samme) |
-| 10–12 | Vægge. Lofter. Vinduer. Facader. | Tag. Gulve. Vinduer. Terrasse. |
-| 12–15,9 | Flere opkald. Flere tilbud. Flere opgaver. | (samme) |
+| 5,9–10 | Med Google Ads fra OMN kommer du øverst – og så ringer de til dig. | (samme) |
+| 10–12,2 | Vægge og lofter, vinduer og facader. | Tage og gulve, vinduer og terrasser. |
+| 12,2–15,9 | Flere opkald, tilbud og opgaver. | (samme) |
 | 15,9–20 | O M N – Google Ads til malere. | O M N – Google Ads til tømrere. |
 
 Stemme: Microsoft neural TTS `da-DK-JeppeNeural`. Musik og lydeffekter er syntetiseret i
@@ -62,7 +69,9 @@ En version er en mappe i `variants/`:
   panelerne i scene 4 (`s4.panels`: ord, ikon og søgning), notifikation og ticker (`s5`) og
   topteksten (`hud`); mangler et felt, bruges teksten i `index.html`. Se `variants/v3/copy.js`.
   Ikonerne til scene 4 vælges med navn fra `ICONS` øverst i `timeline.js`. `mood: 'soft'` giver
-  den rolige udgave af både animation og lyd.
+  den rolige udgave af både animation og lyd. `s4.cues` og `s5.cues` lader panelerne og
+  "FLERE …" følge ord i hele sætninger (klip `t` og `f`) i stedet for ét klip pr. ord, og `s5.at`
+  flytter starten af scene 5.
 - `cues.js` – ordtider, genereres af `tools/build_cues.py`
 
 Et speak-klip kan deles i flere (v3/v4 har `l1` + `l1b`), hvis pausen efter et spørgsmål bliver

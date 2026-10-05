@@ -124,8 +124,8 @@ const BUILD = () => {
   const enter = (el, from, to, pos) => { gsap.set(el, from); return ft(el, from, to, pos); };
   const show = (sel, t) => tl.set(sel, { autoAlpha: 1 }, t);
   const hide = (sel, t) => tl.set(sel, { autoAlpha: 0 }, t);
-  const rise = (els, t, o = {}) => ft(els, { yPercent: 115, rotate: o.rot ?? 6 },
-    { yPercent: 0, rotate: 0, duration: o.d ?? 0.7, ease: o.ease ?? 'expo.out', stagger: o.st ?? 0.035 }, t);
+  const rise = (els, t, o = {}) => ft(els, { yPercent: 115, rotate: (o.rot ?? 6) * (SOFT ? 0.25 : 1) },
+    { yPercent: 0, rotate: 0, duration: (o.d ?? 0.7) * (SOFT ? 1.25 : 1), ease: o.ease ?? (SOFT ? 'power3.out' : 'expo.out'), stagger: o.st ?? 0.035 }, t);
   const punch = (t, s = 1.04, d = 0.6) => ft('#punch', { scale: SOFT ? 1 + (s - 1) * 0.35 : s }, { scale: 1, duration: d, ease: 'expo.out' }, t);
   const shake = (t, amp = 12) => { if (SOFT) return; const a = amp * 0.7; return tl.to('#shake', {
     keyframes: [
@@ -315,20 +315,25 @@ const BUILD = () => {
   show('#s4', 9.99);
   tl.set('#ripple', { opacity: 0 }, 10.0);
   const P = ['#p1', '#p2', '#p3', '#p4'];
-  const TT = [C.t1.start, C.t2.start, C.t3.start, C.t4.start];
-  const clipFrom = [null, 'inset(0% 0% 0% 100%)', 'inset(100% 0% 0% 0%)', 'inset(0% 100% 0% 0%)'];
+  // panel-tider: ord i én speak-sætning (copy.js → s4.cues) eller starten af klip t1–t4
+  const TT = COPY.s4?.cues ? COPY.s4.cues.map(cw) : [C.t1.start, C.t2.start, C.t3.start, C.t4.start];
+  // soft: alle paneler glider ind fra højre, og det forrige glider med ud, så bevægelsen flyder i én retning
+  const clipFrom = SOFT ? [null, ...Array(3).fill('inset(0% 0% 0% 100%)')] : [null, 'inset(0% 0% 0% 100%)', 'inset(100% 0% 0% 0%)', 'inset(0% 100% 0% 0%)'];
   P.forEach((p, k) => {
     const t = TT[k];
     if (k > 0) {
+      // varighed af panel-skiftet; soft: længere, men aldrig over godt halvdelen af tiden siden forrige ord
+      const WD = SOFT ? clamp((t - TT[k - 1]) * 0.55, 0.25, 0.45) : 0.3;
       gsap.set(p, { clipPath: clipFrom[k] });
-      tl.to(p, { clipPath: 'inset(0% 0% 0% 0%)', duration: 0.3, ease: 'expo.inOut' }, t - 0.3);
-      sfx(t - 0.3, 'swish', { f: 0.9 + k * 0.12 });
+      tl.to(p, { clipPath: 'inset(0% 0% 0% 0%)', duration: WD, ease: SOFT ? 'power2.inOut' : 'expo.inOut' }, t - WD);
+      if (SOFT) tl.to($$(['.icon', '.word', '.chip'].map((c) => `${P[k - 1]} ${c}`).join(',')), { x: -160, duration: WD, ease: 'power2.in' }, t - WD);
+      sfx(t - WD, 'swish', { f: 0.9 + k * 0.12 });
     }
     rise(I(p + ' .word'), t - 0.13, { st: 0.035, d: 0.5, rot: 14 });
     const paths = $$(p + ' .icon path');
     gsap.set(paths, { strokeDasharray: 1, strokeDashoffset: 1 });
     tl.to(paths, { strokeDashoffset: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }, t - 0.15);
-    enter(p + ' .icon', { scale: 0.6, rotate: -20, opacity: 0 }, { scale: 1, rotate: 0, opacity: 1, duration: 0.5, ease: 'back.out(2)' }, t - 0.15);
+    enter(p + ' .icon', { scale: 0.6, rotate: SOFT ? 0 : -20, opacity: 0 }, { scale: 1, rotate: 0, opacity: 1, duration: 0.5, ease: SOFT ? 'power3.out' : 'back.out(2)' }, t - 0.15);
     enter(p + ' .chip', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }, t - 0.04);
     const tq = $(p + ' .tq'); typeHook(tq, tq.dataset.text, t + 0.02, 0.02, false);
     const bgw = $$(p + ' .bgw');
@@ -341,19 +346,22 @@ const BUILD = () => {
   // =========================================================
   // S5 · 11.92–15.95 · "Flere opkald. Flere tilbud. Flere opgaver."
   // =========================================================
-  show('#s5', 11.92);
+  // start for scene 5: copy.js → s5.at (standard 11,92), så scene 4 kan få lidt længere tid
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const S5T = COPY.s5?.at ?? 11.92, s5 = (d) => r3(S5T + d);
+  show('#s5', S5T);
   gsap.set('#s5', { clipPath: `circle(0% at ${LAY.iris})` });
-  tl.to('#s5', { clipPath: `circle(150% at ${LAY.iris})`, duration: 0.55, ease: 'expo.inOut' }, 11.92);
-  sfx(11.9, 'whoosh', { d: 0.6, f: 0.7 });
-  hide('#s4', 12.5);
-  tl.to('#s5bg', { opacity: 0, duration: 0.5, ease: 'power1.inOut' }, 12.5);
+  tl.to('#s5', { clipPath: `circle(150% at ${LAY.iris})`, duration: 0.55, ease: 'expo.inOut' }, S5T);
+  sfx(s5(-0.02), 'whoosh', { d: 0.6, f: 0.7 });
+  hide('#s4', s5(0.58));
+  tl.to('#s5bg', { opacity: 0, duration: 0.5, ease: 'power1.inOut' }, s5(0.58));
 
   const cpath = $('#cpath'); const L = cpath.getTotalLength();
   const chead = $('#chead'), chalo = $('#chalo'), crect = $('#cclipr');
   cpath.style.strokeDasharray = L;
   const cease = gsap.parseEase('power2.inOut');
   hooks.push((t) => {
-    const p = cease(clamp((t - 12.1) / 3.3, 0, 1));
+    const p = cease(clamp((t - s5(0.18)) / r3(15.4 - s5(0.18)), 0, 1));   // grafen når toppen ved 15,4 s
     cpath.style.strokeDashoffset = L * (1 - p);
     const pt = cpath.getPointAtLength(L * p);
     chead.setAttribute('cx', pt.x); chead.setAttribute('cy', pt.y);
@@ -363,29 +371,34 @@ const BUILD = () => {
     chead.style.opacity = p > 0.001 ? 1 : 0; chalo.style.opacity = chead.style.opacity;
   });
 
-  enter('#s5l .lab', { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.6 }, 12.15);
+  enter('#s5l .lab', { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.6 }, s5(0.23));
   hooks.push((t) => { $('#s5l .lab i').style.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(t * 7)); });
   gsap.set('#flere', { transformOrigin: '0% 70%' });
-  rise(I('#flere'), w('f1', 0) - 0.06, { st: 0.04, d: 0.6, rot: 10 });
+  // "flere" og navneordene: ord i én speak-sætning (copy.js → s5.cues) eller klip f1–f3
+  const FL = COPY.s5?.cues ? COPY.s5.cues.flere.map(cw) : [w('f1', 0), w('f2', 0), w('f3', 0)];
+  const FN = COPY.s5?.cues ? COPY.s5.cues.noun.map(cw) : [w('f1', 1), w('f2', 1), w('f3', 1)];
+  rise(I('#flere'), FL[0] - 0.06, { st: 0.04, d: 0.6, rot: 10 });
   gsap.set('#slot .list', { y: 236 });
-  tl.to('#slot .list', { y: 0, duration: 0.5, ease: 'expo.out' }, w('f1', 1) - 0.08);
-  tl.to('#slot .list', { y: -236, duration: 0.5, ease: 'expo.inOut' }, w('f2', 1) - 0.22);
-  tl.to('#slot .list', { y: -472, duration: 0.5, ease: 'expo.inOut' }, w('f3', 1) - 0.22);
-  [w('f2', 0), w('f3', 0)].forEach((t) => ft('#flere', { scale: 1.06 }, { scale: 1, duration: 0.5 }, t));
-  [w('f1', 1), w('f2', 1), w('f3', 1)].forEach((t, k) => { punch(t - 0.04, 1.025, 0.5); accent(t - 0.05, 0.5, [72, 76, 79][k]); });
+  tl.to('#slot .list', { y: 0, duration: 0.5, ease: 'expo.out' }, FN[0] - 0.08);
+  tl.to('#slot .list', { y: -236, duration: 0.5, ease: 'expo.inOut' }, FN[1] - 0.22);
+  tl.to('#slot .list', { y: -472, duration: 0.5, ease: 'expo.inOut' }, FN[2] - 0.22);
+  [FL[1], FL[2]].forEach((t) => ft('#flere', { scale: SOFT ? 1.03 : 1.06 }, { scale: 1, duration: 0.5 }, t));
+  FN.forEach((t, k) => { punch(t - 0.04, 1.025, 0.5); accent(t - 0.05, 0.5, [72, 76, 79][k]); });
 
   const { fromY, ...phoneT } = LAY.phone;
   gsap.set('#phonewrap', { transformPerspective: 1800, ...phoneT });
-  enter('#phonewrap', { y: 180, opacity: 0, rotateY: fromY }, { y: 0, opacity: 1, rotateY: phoneT.rotateY, duration: 0.95 }, 11.98);
+  enter('#phonewrap', { y: 180, opacity: 0, rotateY: fromY }, { y: 0, opacity: 1, rotateY: phoneT.rotateY, duration: 0.95 }, s5(0.06));
   hooks.push((t) => gsap.set('#phone', { y: Math.sin(t * 1.6) * 9 }));
+  // notifikationer følger "flere"-ordene, når speaken er én sætning
+  const N = ['#n1', '#n2', '#n3'], NT = COPY.s5?.cues ? FL.map((t) => t + 0.1) : [12.56, 13.56, 14.56];
+  const RING = r3(NT[0] + 0.02);
   tl.to('#phone', {
     keyframes: [3, -3, 3, -3, 2.5, -2.5, 2, -2, 0].map((r) => ({ rotate: r, duration: 0.05 })), ease: 'none',
-  }, 12.62);
-  ['#wv1', '#wv2', '#wv3'].forEach((v, k) => enter(v, { scale: 0.7, opacity: 0.9 }, { scale: 1.9, opacity: 0, duration: 1.0, ease: 'power2.out' }, 12.6 + k * 0.2));
+  }, r3(RING + 0.04));
+  ['#wv1', '#wv2', '#wv3'].forEach((v, k) => enter(v, { scale: 0.7, opacity: 0.9 }, { scale: 1.9, opacity: 0, duration: 1.0, ease: 'power2.out' }, r3(RING + 0.02 + k * 0.2)));
   gsap.set(['#wv1', '#wv2', '#wv3'], { opacity: 0 });
-  sfx(12.58, 'ring');
+  sfx(RING, 'ring');
 
-  const N = ['#n1', '#n2', '#n3'], NT = [12.56, 13.56, 14.56];
   N.forEach((n, k) => {
     enter(n, { opacity: 0, y: -50, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: 'back.out(1.7)' }, NT[k]);
     for (let j = 0; j < k; j++) tl.to(N[j], { y: (k - j) * 124, duration: 0.45, ease: 'expo.out' }, NT[k]);
@@ -395,9 +408,9 @@ const BUILD = () => {
   const trades = COPY.s5?.ticker || ['TØMRER', 'MALER', 'MURER', 'VVS', 'ELEKTRIKER', 'TAGDÆKKER', 'SNEDKER', 'GULVLÆGGER', 'KLOAKMESTER', 'ANLÆGSGARTNER', 'GLARMESTER', 'SMED'];
   $('#run').innerHTML = Array(3).fill(trades.map((x) => `<b>${x}</b>&nbsp;&nbsp;•&nbsp;&nbsp;`).join('')).join('');
   gsap.set('#run', { x: 360 });
-  enter('#ticker', { y: 90, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, 12.3);
-  tl.to(['#hud .bl', '#hud .br'], { opacity: 0, duration: 0.3, ease: 'power1.out' }, 12.1);
-  ft('#run', { x: 360 }, { x: -1100, duration: 4, ease: 'none' }, 12.0);
+  enter('#ticker', { y: 90, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, s5(0.38));
+  tl.to(['#hud .bl', '#hud .br'], { opacity: 0, duration: 0.3, ease: 'power1.out' }, s5(0.18));
+  ft('#run', { x: 360 }, { x: -1100, duration: 4, ease: 'none' }, s5(0.08));
 
   // ud: alt samles mod midten
   tl.to(['#s5l', '#phonewrap', '#ticker', '#chart'], { scale: (i, el) => gsap.getProperty(el, 'scale') * 0.9, opacity: 0, filter: 'blur(14px)', duration: 0.45, ease: 'power3.in', stagger: 0.03 }, 15.45);
@@ -448,7 +461,7 @@ const BUILD = () => {
   // Globalt: HUD, kamera, baggrund
   // =========================================================
   tl.to('#hud .abs:not(#prog)', { opacity: 0, duration: 0.4, ease: 'power1.in' }, 15.55);
-  const scenes = [[0, '01 / SØGNINGEN'], [3.3, '02 / KONKURRENTEN'], [5.86, '03 / GOOGLE ADS'], [9.99, COPY.s4?.label || '04 / FAGENE'], [11.92, '05 / RESULTATER'], [15.9, '06 / OMN']];
+  const scenes = [[0, '01 / SØGNINGEN'], [3.3, '02 / KONKURRENTEN'], [5.86, '03 / GOOGLE ADS'], [9.99, COPY.s4?.label || '04 / FAGENE'], [S5T, '05 / RESULTATER'], [15.9, '06 / OMN']];
   const pad = (n) => String(n).padStart(2, '0');
   hooks.push((t) => {
     $('#prog').style.transform = `scaleX(${clamp(t / DUR, 0, 1)})`;
@@ -456,7 +469,8 @@ const BUILD = () => {
     let s = scenes[0][1]; scenes.forEach(([st, n]) => { if (t >= st) s = n; });
     $('#scn').textContent = s;
     const z = 1 + 0.04 * cease(clamp((t - 16.2) / 3.8, 0, 1));
-    gsap.set('#cam', { x: Math.sin(t * 0.7) * 10, y: Math.cos(t * 0.55) * 7, rotate: Math.sin(t * 0.4) * 0.3, scale: z });
+    const breathe = SOFT ? 1 + 0.012 * Math.sin(t * 0.55) : 1;   // soft: langsom, konstant zoom-bølge
+    gsap.set('#cam', { x: Math.sin(t * 0.7) * 10, y: Math.cos(t * 0.55) * 7, rotate: Math.sin(t * 0.4) * 0.3, scale: z * breathe });
     gsap.set('#dotgrid', { x: -((t * 18) % 48), y: -((t * 11) % 48) });
     $$('.blob').forEach((b, k) => gsap.set(b, { x: Math.sin(t * 0.35 + k * 1.7) * 90, y: Math.cos(t * 0.3 + k * 2.1) * 70 }));
   });
