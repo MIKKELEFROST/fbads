@@ -112,6 +112,9 @@ const BUILD = () => {
   const I = (sel) => $$(sel + ' .i');
 
   // ---------- tidslinje-hjælpere ----------
+  // mood: 'soft' i copy.js → roligere udgave: ingen rystelser, svagere zoom-slag, og bløde
+  // anslag ('tap', 'bloom') i stedet for bas-slag ('hit', 'impact'). mix_audio.py vælger musik herefter.
+  const SOFT = COPY.mood === 'soft';
   const tl = gsap.timeline({ paused: true, defaults: { ease: 'expo.out' } });
   const hooks = [];   // funktioner af t, kørt efter hver seek (typing, blink, kamera …)
   const SFX = [];
@@ -123,8 +126,8 @@ const BUILD = () => {
   const hide = (sel, t) => tl.set(sel, { autoAlpha: 0 }, t);
   const rise = (els, t, o = {}) => ft(els, { yPercent: 115, rotate: o.rot ?? 6 },
     { yPercent: 0, rotate: 0, duration: o.d ?? 0.7, ease: o.ease ?? 'expo.out', stagger: o.st ?? 0.035 }, t);
-  const punch = (t, s = 1.04, d = 0.6) => ft('#punch', { scale: s }, { scale: 1, duration: d, ease: 'expo.out' }, t);
-  const shake = (t, amp = 12) => { const a = amp * 0.7; return tl.to('#shake', {
+  const punch = (t, s = 1.04, d = 0.6) => ft('#punch', { scale: SOFT ? 1 + (s - 1) * 0.35 : s }, { scale: 1, duration: d, ease: 'expo.out' }, t);
+  const shake = (t, amp = 12) => { if (SOFT) return; const a = amp * 0.7; return tl.to('#shake', {
     keyframes: [
       { x: a, y: -a * 0.6, duration: 0.035 }, { x: -a * 0.8, y: a * 0.5, duration: 0.035 },
       { x: a * 0.5, y: -a * 0.3, duration: 0.04 }, { x: -a * 0.25, y: a * 0.15, duration: 0.045 },
@@ -133,9 +136,12 @@ const BUILD = () => {
   }, t); };
   const slam = (el, t, o = {}) => {
     gsap.set(I(el), { yPercent: 0 });
-    enter(el, { opacity: 0, scale: o.s ?? 1.55, filter: 'blur(22px)' },
-      { opacity: 1, scale: 1, filter: 'blur(0px)', duration: o.d ?? 0.5, ease: 'expo.out' }, t);
+    const s = o.s ?? 1.55;
+    enter(el, { opacity: 0, scale: SOFT ? 1 + (s - 1) * 0.3 : s, filter: `blur(${SOFT ? 10 : 22}px)` },
+      { opacity: 1, scale: 1, filter: 'blur(0px)', duration: o.d ?? (SOFT ? 0.6 : 0.5), ease: SOFT ? 'power3.out' : 'expo.out' }, t);
   };
+  // anslag på et nøgleord: bas-slag, eller i soft-udgaven en blød tone (n = midi-tone)
+  const accent = (t, g, n) => (SOFT ? sfx(t, 'tap', { g, n }) : sfx(t, 'hit', { g }));
   // menneskelig skrivning med deterministisk variation; returnerer anslagstider
   const typeHook = (el, str, t0, per, sound = true) => {
     const ts = []; let acc = t0;
@@ -226,13 +232,13 @@ const BUILD = () => {
   rise(I('#s2t .a'), cw(S2.a.cue) - 0.05, { st: 0.06 });
   gsap.set('#s2t .b', { transformOrigin: '0% 60%' });
   slam('#s2t .b', B2 - 0.07);
-  punch(B2 - 0.03, 1.045); shake(B2, 10); sfx(B2 - 0.03, 'hit', { g: 0.8 });
+  punch(B2 - 0.03, 1.045); shake(B2, 10); accent(B2 - 0.03, 0.8, 76);
   const you2 = $('#serp2 .you');
   tl.to(you2, { boxShadow: '0 0 0 5px #4285F4, 0 20px 60px rgba(66,133,244,.3)', duration: 0.25, ease: 'power2.out' }, B2);
   rise(I('#s2t .c'), cw(S2.c.cue) - 0.05, { st: 0.06 });
   rise(I('#s2t .d'), D2 - 0.1, { st: 0.03, d: 0.55, rot: 12 });
   tl.to('#s2t .b', { opacity: 0.22, duration: 0.4, ease: 'power2.out' }, D2);
-  punch(D2 - 0.02, 1.03); shake(D2, 8); sfx(D2 - 0.03, 'hit', { g: 0.65 });
+  punch(D2 - 0.02, 1.03); shake(D2, 8); accent(D2 - 0.03, 0.65, 72);
   tl.to(you2, { y: 260, rotate: 8, opacity: 0.12, duration: 0.7, ease: 'power3.in' }, D2 - 0.05);
   sfx(D2, 'fall');
   tl.to('#serp2 .card.k', { boxShadow: '0 0 0 4px rgba(234,67,53,.95), 0 20px 60px rgba(234,67,53,.25)', duration: 0.3, stagger: 0.05, ease: 'power2.out' }, D2 + 0.05);
@@ -265,7 +271,7 @@ const BUILD = () => {
   rise(I('#s3l .star'), cw(S3.star.cue) - 0.07, { st: 0.05 });
   gsap.set('#s3l .ov', { transformOrigin: '0% 55%' });
   slam('#s3l .ov', OV - 0.07, { s: 1.7 });
-  punch(OV - 0.03, 1.055); shake(OV, 15); sfx(OV - 0.04, 'hit', { g: 1 });
+  punch(OV - 0.03, 1.055); shake(OV, 15); accent(OV - 0.04, 1, 81);
   const capw = I('#s3l .cap');
   S3.cap.cues.forEach((c, k) => rise(capw[k], cw(c) - 0.05, { d: 0.55 }));
   enter('#s3l .cap .mk', { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: 'expo.inOut' }, cw(S3.cap.hlCue) + 0.04);
@@ -329,7 +335,7 @@ const BUILD = () => {
     ft(bgw[0], { x: -200 }, { x: -900, duration: 2.8, ease: 'none' }, t - 0.4);
     ft(bgw[1], { x: -1100 }, { x: -400, duration: 2.8, ease: 'none' }, t - 0.4);
     punch(t - 0.03, 1.035, 0.45); shake(t - 0.01, 9);
-    sfx(t - 0.03, 'hit', { g: 0.75 });
+    accent(t - 0.03, 0.75, [69, 72, 76, 81][k]);
   });
 
   // =========================================================
@@ -366,7 +372,7 @@ const BUILD = () => {
   tl.to('#slot .list', { y: -236, duration: 0.5, ease: 'expo.inOut' }, w('f2', 1) - 0.22);
   tl.to('#slot .list', { y: -472, duration: 0.5, ease: 'expo.inOut' }, w('f3', 1) - 0.22);
   [w('f2', 0), w('f3', 0)].forEach((t) => ft('#flere', { scale: 1.06 }, { scale: 1, duration: 0.5 }, t));
-  [w('f1', 1), w('f2', 1), w('f3', 1)].forEach((t) => { punch(t - 0.04, 1.025, 0.5); sfx(t - 0.05, 'hit', { g: 0.5 }); });
+  [w('f1', 1), w('f2', 1), w('f3', 1)].forEach((t, k) => { punch(t - 0.04, 1.025, 0.5); accent(t - 0.05, 0.5, [72, 76, 79][k]); });
 
   const { fromY, ...phoneT } = LAY.phone;
   gsap.set('#phonewrap', { transformPerspective: 1800, ...phoneT });
@@ -408,9 +414,9 @@ const BUILD = () => {
   sfx(15.3, 'riser', { d: 0.65 });
   const IMPACT = 15.98;
   show('#s6', 15.9);
-  sfx(IMPACT, 'impact');
+  sfx(IMPACT, SOFT ? 'bloom' : 'impact');
   punch(IMPACT, 1.07, 0.9); shake(IMPACT, 16);
-  enter('#flash', { opacity: 0 }, { opacity: 0.45, duration: 0.05, ease: 'none' }, IMPACT);
+  enter('#flash', { opacity: 0 }, { opacity: SOFT ? 0.2 : 0.45, duration: 0.05, ease: 'none' }, IMPACT);
   tl.to('#flash', { opacity: 0, duration: 0.5, ease: 'power2.out' }, IMPACT + 0.05);
   ['#bu1', '#bu2'].forEach((b, k) => enter(b, { scale: 0, opacity: 1 }, { scale: 2.6 + k, opacity: 0, duration: 0.9 + k * 0.2, ease: 'expo.out' }, IMPACT + k * 0.06));
 
@@ -419,7 +425,7 @@ const BUILD = () => {
   const logoL = I('#logo');
   [0, 1, 2].forEach((k) => {
     ft(logoL[k], { yPercent: 115, rotate: 8, scale: 1.2 }, { yPercent: 0, rotate: 0, scale: 1, duration: 0.8, ease: 'expo.out' }, w('l6', k) - 0.05);
-    if (k) sfx(w('l6', k) - 0.04, 'hit', { g: 0.35 });
+    if (k) accent(w('l6', k) - 0.04, 0.35, [0, 76, 79][k]);
   });
   const onw = I('#oname');
   COPY.s6.oname.cues.forEach((c, k) => rise(onw[k], cw(c) - 0.06, { d: 0.7 }));

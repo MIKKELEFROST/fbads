@@ -29,7 +29,9 @@ Scenerne og tiderne er de samme i alle versioner; speak og skærmtekst skifter.
 ### v3 og v4 – ét fag i fokus
 
 v3 (maler) og v4 (tømrer) har samme manus, så de kan testes direkte mod hinanden; kun faget
-skifter. Søgning, autoudfyld, søgeresultater, opgaverne i scene 4, notifikationen, tickeren og
+skifter. De er også roligere end v1/v2 (`mood: 'soft'` i `copy.js`): ingen stortromme eller
+bas-slag på nøgleordene, men blød musik med pad, klokker og shaker, bløde toner som anslag og
+ingen kamerarystelser. Søgning, autoudfyld, søgeresultater, opgaverne i scene 4, notifikationen, tickeren og
 slutkortet følger faget.
 
 | Tid | v3 – maler | v4 – tømrer |
@@ -59,7 +61,8 @@ En version er en mappe i `variants/`:
   en version også skifte baggrundsteksten i scene 1 (`s1.mq`), søgeresultaterne (`serp`),
   panelerne i scene 4 (`s4.panels`: ord, ikon og søgning), notifikation og ticker (`s5`) og
   topteksten (`hud`); mangler et felt, bruges teksten i `index.html`. Se `variants/v3/copy.js`.
-  Ikonerne til scene 4 vælges med navn fra `ICONS` øverst i `timeline.js`.
+  Ikonerne til scene 4 vælges med navn fra `ICONS` øverst i `timeline.js`. `mood: 'soft'` giver
+  den rolige udgave af både animation og lyd.
 - `cues.js` – ordtider, genereres af `tools/build_cues.py`
 
 Et speak-klip kan deles i flere (v3/v4 har `l1` + `l1b`), hvis pausen efter et spørgsmål bliver

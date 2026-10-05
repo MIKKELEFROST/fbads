@@ -2,6 +2,8 @@
  * Felter, der ikke findes i v1/v2 (s1.mq, serp, s4, s5, hud), erstatter standardteksterne i
  * index.html, så hele filmen handler om ét fag. */
 window.COPY = {
+  // roligere udgave: ingen rystelser og bas-slag, blød musik uden stortromme (se timeline.js og mix_audio.py)
+  mood: 'soft',
   h1: { pre: 'Er du', ul: 'maler?', cues: [['l1', 0], ['l1', 1], ['l1', 2]], size: [140, 116] },
   query: { text: 'maler i nærheden', at: 1.45 },
   ac: [['maler ', 'i nærheden'], ['maler ', 'pris pr. m2'], ['malerfirma ', 'tilbud'], ['male ', 'hus udvendigt']],

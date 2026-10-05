@@ -1,5 +1,8 @@
 """Lydspor til OMN-filmen: syntetiseret musik (120 BPM), lydeffekter og speak.
 
+Versioner med mood: 'soft' i copy.js (v3, v4) får music_soft(): ingen stortromme, clap eller
+sidechain-pumpen, kun pad, klokke-arpeggio, blød bas, shaker og fingerknips.
+
 Alt genereres her (ingen licenserede samples). Musik og effekter følger de samme
 tidspunkter som animationen: speak fra variants/<v>/lines.json ("at"), effekter fra
 audio/<v>/sfx.json (eksporteret af `node tools/render.cjs --variant v2 --sfx audio/v2/sfx.json`).
@@ -19,6 +22,7 @@ from build_cues import build as build_cues
 
 ROOT = Path(__file__).resolve().parent.parent
 VARIANT = variant.name()
+MOOD = variant.mood(VARIANT)
 AUD = variant.paths(VARIANT)["aud"]
 SR = 48000
 DUR = 20.0
@@ -158,6 +162,32 @@ def pad_chord(notes, d, bright=1800):
     return st * adsr(len(t), 0.35, 0.6)
 
 
+def shaker(accent=1.0):
+    t = tt(0.09)
+    env = np.minimum(t / 0.012, 1) * np.exp(-t / 0.03)
+    return bp(rng.standard_normal(len(t)), 4500, 11000) * env * accent
+
+
+def snap():
+    t = tt(0.12)
+    return bp(rng.standard_normal(len(t)), 1400, 4200) * np.exp(-t / 0.018) * 0.8
+
+
+def soft_bass(m, d):
+    t = tt(d)
+    f = mtof(m)
+    s = np.sin(2 * np.pi * f * t) + 0.25 * np.sin(2 * np.pi * 2 * f * t) * np.exp(-t / 0.3)
+    return s * adsr(len(t), 0.12, 0.45)
+
+
+def bell(m, d=0.6):
+    t = tt(d)
+    f = mtof(m)
+    s = (np.sin(2 * np.pi * f * t) * np.exp(-t / 0.35) + 0.35 * np.sin(2 * np.pi * f * 3.01 * t) * np.exp(-t / 0.12)
+         + 0.15 * np.sin(2 * np.pi * f * 4.2 * t) * np.exp(-t / 0.06))
+    return s * adsr(len(t), 0.003, 0.05)
+
+
 # ---------------------------------------------------------------- lydeffekter
 def noise_sweep(d, f0, f1, q=0.6, shape="bell"):
     t = tt(d)
@@ -219,6 +249,18 @@ def sfx_sound(ev):
         boom = np.sin(2 * np.pi * np.cumsum(40 + 90 * np.exp(-t / 0.05)) / SR) * np.exp(-t / 0.25)
         crack = bp(rng.standard_normal(len(t)), 5000, 12000) * np.exp(-t / 0.03) * 0.35
         return np.tanh((boom + crack) * 1.5), 0.42 * g, 0.0
+    if k == "tap":   # blødt anslag (soft-udgaven af "hit"): marimba-agtig tone
+        t = tt(0.5)
+        f = mtof(o.get("n", 76))
+        s = np.sin(2 * np.pi * f * t) * np.exp(-t / 0.16) + 0.3 * np.sin(2 * np.pi * f * 4 * t) * np.exp(-t / 0.03)
+        s += hp(rng.standard_normal(len(t)), 3000) * np.exp(-t / 0.004) * 0.15
+        return s * adsr(len(t), 0.001, 0.05), 0.2 * o.get("g", 1.0), 0.0
+    if k == "bloom":   # soft-udgaven af "impact": lys akkord, der folder sig ud, uden sub-bas
+        t = tt(2.6)
+        s = sum(np.sin(2 * np.pi * mtof(m) * t) * (1.0 if m < 70 else 0.6) for m in (60, 64, 67, 71, 74, 79)) / 6
+        s *= (1 - np.exp(-t / 0.05)) * np.exp(-t / 0.9)
+        s[: int(1.2 * SR)] += noise_sweep(1.2, 7000, 2500, 0.8, "decay") * 0.2
+        return s, 0.45, 0.0
     if k == "impact":
         t = tt(2.6)
         boom = np.sin(2 * np.pi * np.cumsum(34 + 110 * np.exp(-t / 0.08)) / SR) * np.exp(-t / 0.9)
@@ -348,6 +390,45 @@ def music():
     return (mus + drums)[:, :N]
 
 
+def music_soft():
+    """Rolig udgave: samme akkorder og tempo, men ingen stortromme, clap eller sidechain."""
+    mus = np.zeros((2, N + SR * 3))
+    perc = np.zeros((2, N + SR * 3))
+    for bar, name in enumerate(BARS):
+        b0 = bar * 2.0
+        root, notes = CHORDS[name]
+        if bar < 8:
+            place_st(mus, pad_chord(notes, 2.4, 1400 if b0 < 6 else 1900), b0, 0.2)
+        elif bar == 8:
+            place_st(mus, pad_chord(notes + [72], 2.6, 2200), 15.98, 0.26)
+        else:
+            place_st(mus, pad_chord(notes, 1.3, 1900), 18.0, 0.22)
+            place_st(mus, pad_chord(CHORDS["C"][1] + [72], 2.4, 1800), 19.0, 0.22)
+        # blød, liggende bas – én tone pr. takt, så den ikke pulserer
+        t = max(b0, 1.0)
+        end = min(b0 + 2.0, 15.5 if b0 < 16 else 19.0)
+        place(mus, soft_bass(root, end - t), t, 0.2 if t < 6 else 0.26)
+        # klokke-arpeggio: fjerdedele i starten, ottendedele fra scene 2
+        arp = [notes[0] + 12, notes[2] + 12, notes[1] + 12, notes[3] + 12]
+        for s in range(8):
+            t = b0 + s * 0.25
+            if t < 1.0 or 15.45 <= t < 16.5 or t >= 19.0 or (t < 3.3 and s % 2):
+                continue
+            place(mus, bell(arp[s % 4]), t, 0.05 if t < 16 else 0.04, -0.35 if s % 2 else 0.35)
+    # shaker i 16.-dele og fingerknips på 2 og 4
+    for i in range(160):
+        t = i * 0.125
+        if 3.3 <= t < 15.5 or (16.0 <= t < 19.0 and i % 2 == 0):
+            place(perc, shaker(1.0 if i % 2 == 0 else 0.55), t, 0.07 if t >= 6.0 else 0.05, 0.3)
+    for b in range(40):
+        t = b * BEAT
+        if 6.0 <= t < 15.5 and b % 2 == 1:
+            place(perc, snap(), t, 0.12, -0.1)
+    mus = reverb(mus, 0.35)
+    perc = reverb(perc, 0.12)
+    return (mus + perc)[:, :N]
+
+
 # ---------------------------------------------------------------- speak
 def voice(cues):
     vo = np.zeros((2, N))
@@ -383,7 +464,7 @@ def main():
     cues = build_cues(VARIANT)
     sfx_events = json.loads((AUD / "sfx.json").read_text())
 
-    mus = music()
+    mus = music_soft() if MOOD == "soft" else music()
     sfx = np.zeros((2, N + SR * 3))
     for ev in sfx_events:
         s, g, pan = sfx_sound(ev)
@@ -393,7 +474,7 @@ def main():
 
     duck = duck_env(vo, 9.0)
     sduck = duck_env(vo, 4.0)
-    mus = mus * 0.62 * duck
+    mus = mus * (0.75 if MOOD == "soft" else 0.62) * duck   # soft-musikken mangler trommernes energi
     sfx = sfx * 0.75 * sduck
     mix = mus + sfx + vo
     # blød fade i de sidste 0,5 s

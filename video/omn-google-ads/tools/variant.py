@@ -5,6 +5,7 @@
     variants/<v>/cues.js      genereret af build_cues.py
     audio/<v>/                speak-klip, sfx.json og lydmix
 """
+import re
 import sys
 from pathlib import Path
 
@@ -24,3 +25,9 @@ def paths(v):
         "aud": aud,
         "vo": aud / "vo",
     }
+
+
+def mood(v):
+    """Stemning fra copy.js: mood: 'soft' giver blød musik og bløde anslag, ellers standard ("punch")."""
+    m = re.search(r"\bmood:\s*'(\w+)'", (ROOT / "variants" / v / "copy.js").read_text())
+    return m.group(1) if m else "punch"

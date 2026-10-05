@@ -1,6 +1,8 @@
 /* Version 4 – tømrer i fokus ("Er du tømrer?"). Samme opbygning som v3 (maler), så de to kan
  * testes direkte mod hinanden. Se variants/v1/copy.js for formatet og v3 for de ekstra felter. */
 window.COPY = {
+  // roligere udgave: ingen rystelser og bas-slag, blød musik uden stortromme (se timeline.js og mix_audio.py)
+  mood: 'soft',
   h1: { pre: 'Er du', ul: 'tømrer?', cues: [['l1', 0], ['l1', 1], ['l1', 2]], size: [140, 116] },
   query: { text: 'tømrer i nærheden', at: 1.45 },
   ac: [['tømrer ', 'i nærheden'], ['tømrer ', 'pris pr. time'], ['tømrerfirma ', 'tilbud'], ['nyt tag ', 'pris']],
