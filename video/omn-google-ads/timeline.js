@@ -1,0 +1,504 @@
+/* OMN – Google Ads til håndværkere. 20 sek. motion graphics.
+ *
+ * Hele filmen er én pauset GSAP-tidslinje. window.seek(t) tegner præcis billedet
+ * til tidspunktet t, så render.mjs kan tage et skærmbillede pr. frame.
+ * Tidspunkter for speak kommer fra variants/<v>/cues.js (tools/build_cues.py) og
+ * skærmteksterne fra variants/<v>/copy.js – vælg version med index.html?v=v2.
+ * Lydeffekter registreres med sfx() og hentes af render.mjs til lydmixet.
+ */
+// streg-ikoner til fag-scenen (viewBox 64×64), valgt med navn i copy.js → s4.panels[].icon
+const ICONS = {
+  hammer: ['M34.3 9.9L54.1 29.7 45.7 38.1 25.9 18.3Z', 'M10 54L35.6 28.4'],
+  roller: ['M12 10h34a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4z', 'M50 17h6v14H32v8', 'M32 39v16'],
+  brick: ['M8 12h48v40H8z', 'M8 25.3h48M8 38.6h48', 'M24 12v13.3M40 12v13.3M16 25.3v13.3M32 25.3v13.3M48 25.3v13.3M24 38.6V52M40 38.6V52'],
+  drop: ['M32 7C32 7 14 28 14 40a18 18 0 0 0 36 0C50 28 32 7 32 7z', 'M23 41a9 9 0 0 0 9 9'],
+  ladder: ['M20 6v52M44 6v52', 'M20 16h24M20 28h24M20 40h24M20 52h24'],
+  window: ['M14 8h36v42H14z', 'M32 8v42M14 29h36', 'M9 56h46'],
+  house: ['M6 32L32 9l26 23', 'M13 26v30h38V26', 'M27 56V41h10v15'],
+  roof: ['M4 40L32 14l28 26', 'M44 25V12h8v20.4', 'M12 32.6V56h40V32.6'],
+  floor: ['M20 14h24l14 42H6z', 'M28 14l-6 42M36 14l6 42', 'M12.7 36h38.6'],
+  deck: ['M8 22h48', 'M12 22v34M52 22v34', 'M22 22v18M32 22v18M42 22v18', 'M6 40h52'],
+};
+
+const BUILD = () => {
+  const DUR = 20;
+  const C = window.CUES;
+  const w = (k, i) => C[k].words[i].t;
+  const COPY = window.COPY;
+  const cw = ([k, i, off = 0]) => w(k, i) + off;   // cue fra copy.js → tid
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const hash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+  // ---------- format: 16:9 (standard) eller 9:16 (index.html?f=916) ----------
+  const V = document.documentElement.classList.contains('v');
+  const SW = V ? 1080 : 1920, SH = V ? 1920 : 1080;
+  const CX = SW / 2, CY = SH / 2;
+  const LAY = V ? {
+    bar: { x: 90, w: 900 }, acOrigin: '50% -67px',
+    serp2: { rotateY: 0, rotateX: 12, transformOrigin: '50% 0%' },
+    gadsShrink: { y: -60, scale: 0.6 },
+    serp3: { rotateY: 0, rotateX: 10, transformOrigin: '50% 0%' },
+    cursor: { from: [1000, 700], to: [783, 53] },
+    iris: '50% 58%',
+    phone: { rotateY: -10, rotateX: 5, rotateZ: 0, scale: 0.82, transformOrigin: '50% 0%', fromY: -35 },
+    logoBarY: 910,
+  } : {
+    bar: { x: 440, w: 1040 }, acOrigin: '50% -64px',
+    serp2: { rotateY: 16, rotateX: 5, transformOrigin: '0% 50%' },
+    gadsShrink: { y: -62, scale: 0.42 },
+    serp3: { rotateY: -15, rotateX: 4, transformOrigin: '100% 50%' },
+    cursor: { from: [900, 560], to: [583, 53] },
+    iris: '71% 50%',
+    phone: { rotateY: -18, rotateX: 5, rotateZ: 2, scale: 1, transformOrigin: '50% 50%', fromY: -45 },
+    logoBarY: 488,
+  };
+  if (V) {
+    // elementer med inline-placering i 16:9-layoutet
+    [150, 1600].forEach((y, k) => gsap.set(`#mq${k + 1}`, { top: y }));
+    $$('#serp2 .card').forEach((c, k) => gsap.set(c, { top: 136 + 132 * k }));
+    $$('#wipe i').forEach((b, k) => gsap.set(b, { top: k * 480, height: 481 }));
+    $$('.panel').forEach((p) => $$('.bgw', p).forEach((b, k) => gsap.set(b, { top: [170, 1470][k] })));
+    const chart = $('#chart');
+    chart.setAttribute('width', 1080); chart.setAttribute('height', 1920); chart.setAttribute('viewBox', '0 0 1080 1920');
+    const d = 'M0 1460 C 120 1450, 200 1420, 290 1425 S 450 1380, 540 1360 S 680 1320, 760 1270 S 900 1190, 960 1110 S 1050 960, 1080 900';
+    $('#cpath').setAttribute('d', d);
+    $('#carea').setAttribute('d', d + ' L1080 1920 L0 1920 Z');
+    $('#cgrid').setAttribute('d', 'M0 900H1080M0 1050H1080M0 1200H1080M0 1350H1080M0 1500H1080');
+    $('#cclipr').setAttribute('height', 1920);
+  }
+
+  // ---------- skærmtekster fra copy.js (mangler en tekst i copy.js, bruges index.html's) ----------
+  $$('[data-copy]').forEach((el) => {
+    const v = el.dataset.copy.split('.').reduce((o, k) => o?.[k], COPY);
+    if (v != null) el.textContent = v;
+  });
+  // fag-scenen (S4): ord, ikon og søgning pr. panel – uden COPY.s4 vises Tømrer/Maler/Murer/VVS
+  (COPY.s4?.panels || []).forEach((pc, k) => {
+    const p = $(`#p${k + 1}`);
+    $('.word span', p).textContent = pc.word;
+    const rep = Math.ceil(28 / (pc.word.length + 1));
+    $$('.bgw', p).forEach((b) => { b.textContent = Array(rep).fill(pc.word.toUpperCase()).join(' '); });
+    $('.icon', p).innerHTML = ICONS[pc.icon].map((d) => `<path pathLength="1" d="${d}"/>`).join('');
+    $('.tq', p).dataset.text = pc.q;
+  });
+  $$('#ac .acq').forEach((el, k) => {
+    const [plain, bold] = COPY.ac[k];
+    const b = document.createElement('b'); b.textContent = bold;
+    el.textContent = plain; el.appendChild(b);
+  });
+  $('#q2').textContent = COPY.query.text;
+  const sz = (v) => (Array.isArray(v) ? v[V ? 1 : 0] : v);   // [16:9, 9:16] eller ét tal
+  if (COPY.h1.size) gsap.set('#h1', { fontSize: sz(COPY.h1.size) });
+  if (COPY.s2.b.size) gsap.set('#s2t .b', { fontSize: sz(COPY.s2.b.size) });
+  if (COPY.s6.oname.size) gsap.set('#oname', { fontSize: sz(COPY.s6.oname.size) });
+  if (COPY.s4?.size) gsap.set('.panel .word', { fontSize: sz(COPY.s4.size) });
+
+  // ---------- tekst-split ----------
+  const wrap = (txt) => {
+    const m = document.createElement('span'); m.className = 'm';
+    const i = document.createElement('span'); i.className = 'i'; i.textContent = txt;
+    m.appendChild(i); return m;
+  };
+  $$('[data-c]').forEach((el) => {
+    const t = el.textContent; el.textContent = '';
+    [...t].forEach((ch) => el.appendChild(ch === ' ' ? document.createTextNode(' ') : wrap(ch)));
+  });
+  $$('[data-w]').forEach((el) => {
+    const t = el.textContent.trim(); el.textContent = '';
+    if (t) t.split(/\s+/).forEach((wd, k) => { if (k) el.appendChild(document.createTextNode(' ')); el.appendChild(wrap(wd)); });
+  });
+  const I = (sel) => $$(sel + ' .i');
+
+  // ---------- tidslinje-hjælpere ----------
+  // mood: 'soft' i copy.js → roligere udgave: ingen rystelser, svagere zoom-slag, og bløde
+  // anslag ('tap', 'bloom') i stedet for bas-slag ('hit', 'impact'). mix_audio.py vælger musik herefter.
+  const SOFT = COPY.mood === 'soft';
+  const tl = gsap.timeline({ paused: true, defaults: { ease: 'expo.out' } });
+  const hooks = [];   // funktioner af t, kørt efter hver seek (typing, blink, kamera …)
+  const SFX = [];
+  const sfx = (t, type, o = {}) => SFX.push({ t: +t.toFixed(3), type, ...o });
+
+  const ft = (el, from, to, pos) => tl.fromTo(el, from, { immediateRender: false, ...to }, pos);
+  const enter = (el, from, to, pos) => { gsap.set(el, from); return ft(el, from, to, pos); };
+  const show = (sel, t) => tl.set(sel, { autoAlpha: 1 }, t);
+  const hide = (sel, t) => tl.set(sel, { autoAlpha: 0 }, t);
+  const rise = (els, t, o = {}) => ft(els, { yPercent: 115, rotate: (o.rot ?? 6) * (SOFT ? 0.25 : 1) },
+    { yPercent: 0, rotate: 0, duration: (o.d ?? 0.7) * (SOFT ? 1.25 : 1), ease: o.ease ?? (SOFT ? 'power3.out' : 'expo.out'), stagger: o.st ?? 0.035 }, t);
+  const punch = (t, s = 1.04, d = 0.6) => ft('#punch', { scale: SOFT ? 1 + (s - 1) * 0.35 : s }, { scale: 1, duration: d, ease: 'expo.out' }, t);
+  const shake = (t, amp = 12) => { if (SOFT) return; const a = amp * 0.7; return tl.to('#shake', {
+    keyframes: [
+      { x: a, y: -a * 0.6, duration: 0.035 }, { x: -a * 0.8, y: a * 0.5, duration: 0.035 },
+      { x: a * 0.5, y: -a * 0.3, duration: 0.04 }, { x: -a * 0.25, y: a * 0.15, duration: 0.045 },
+      { x: 0, y: 0, duration: 0.06 },
+    ], ease: 'none',
+  }, t); };
+  const slam = (el, t, o = {}) => {
+    gsap.set(I(el), { yPercent: 0 });
+    const s = o.s ?? 1.55;
+    enter(el, { opacity: 0, scale: SOFT ? 1 + (s - 1) * 0.3 : s, filter: `blur(${SOFT ? 10 : 22}px)` },
+      { opacity: 1, scale: 1, filter: 'blur(0px)', duration: o.d ?? (SOFT ? 0.6 : 0.5), ease: SOFT ? 'power3.out' : 'expo.out' }, t);
+  };
+  // anslag på et nøgleord: bas-slag, eller i soft-udgaven en blød tone (n = midi-tone)
+  const accent = (t, g, n) => (SOFT ? sfx(t, 'tap', { g, n }) : sfx(t, 'hit', { g }));
+  // menneskelig skrivning med deterministisk variation; returnerer anslagstider
+  const typeHook = (el, str, t0, per, sound = true) => {
+    const ts = []; let acc = t0;
+    for (let k = 0; k < str.length; k++) { acc += per * (0.6 + 0.8 * hash(k * 13 + str.length)); ts.push(acc); }
+    if (sound) ts.forEach((t, k) => str[k] !== ' ' && sfx(t, 'key', { v: 0.5 + 0.5 * hash(k + 3) }));
+    hooks.push((t) => {
+      let n = 0; while (n < ts.length && ts[n] <= t) n++;
+      if (el._n !== n) { el.textContent = str.slice(0, n); el._n = n; }
+    });
+    return ts;
+  };
+  const caretHook = (el, on, off, typedUntil) => hooks.push((t) => {
+    let v = 0;
+    if (t >= on && t < off) v = t < typedUntil + 0.3 ? 1 : ((t - typedUntil) % 0.9) < 0.5 ? 0 : 1;
+    el.style.opacity = v;
+  });
+
+  gsap.set('.i', { yPercent: 115 });
+
+  // =========================================================
+  // S1 · 0.00–3.60 · "Lige nu søger nogen på Google efter en tømrer i nærheden."
+  // =========================================================
+  show('#s1', 0);
+  ft('#mq1', { x: 0 }, { x: -760, duration: 3.8, ease: 'none' }, 0);
+  ft('#mq2', { x: -1000 }, { x: -240, duration: 3.8, ease: 'none' }, 0);
+  enter('#mq', { opacity: 0 }, { opacity: 1, duration: 1.2, ease: 'power1.out' }, 0.2);
+
+  // fire Google-prikker → søgefeltet
+  const dots = $$('#dots i');
+  dots.forEach((d, k) => gsap.set(d, { left: CX - 87 + 58 * k - 18, scale: 0 }));
+  dots.forEach((d, k) => { ft(d, { scale: 0 }, { scale: 1, duration: 0.5, ease: 'back.out(2.4)' }, 0.06 + k * 0.07); sfx(0.06 + k * 0.07, 'pop', { p: k }); });
+  dots.forEach((d, k) => {
+    tl.to(d, { y: -36, duration: 0.17, ease: 'power2.out' }, 0.42 + k * 0.07);
+    tl.to(d, { y: 0, duration: 0.2, ease: 'power2.in' }, 0.59 + k * 0.07);
+  });
+  gsap.set('#sbar1', { width: 104, left: CX - 52, opacity: 0, scale: 0.4 });
+  gsap.set(['#sbar1 .mag', '#sbar1 .q', '#sd1'], { opacity: 0 });
+  tl.to('#sbar1', { opacity: 1, scale: 1, duration: 0.35, ease: 'back.out(1.8)' }, 0.92);
+  tl.to('#sbar1', { width: LAY.bar.w, left: LAY.bar.x, duration: 0.62, ease: 'expo.inOut' }, 1.0);
+  sfx(0.98, 'whoosh', { d: 0.6, f: 0.8 });
+  dots.forEach((d, k) => tl.to(d, { x: LAY.bar.x + LAY.bar.w - CX - 21 - 37 * k, scale: 0.389, duration: 0.6, ease: 'expo.inOut' }, 1.02 + k * 0.03));
+  tl.set('#dots', { opacity: 0 }, 1.72);
+  tl.set('#sd1', { opacity: 1 }, 1.72);
+  tl.to(['#sbar1 .mag', '#sbar1 .q'], { opacity: 1, duration: 0.3, ease: 'power1.out' }, 1.38);
+
+  const t1 = typeHook($('#q1'), COPY.query.text, COPY.query.at, 0.064);
+  caretHook($('#c1'), 1.4, 3.3, t1[t1.length - 1]);
+
+  // overskrift, ord for ord i takt med speaken
+  const h1w = I('#h1');
+  COPY.h1.cues.forEach((c, k) => rise(h1w[k], cw(c) - 0.06, { d: 0.6 }));
+  enter('#h1 .ul', { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: 'expo.inOut' }, cw(COPY.h1.cues.at(-1)) + 0.12);
+  enter('#live', { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.5 }, 1.55);
+  hooks.push((t) => { $('#live i').style.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(t * 7)); });
+
+  // autoudfyld
+  gsap.set('#ac', { transformOrigin: LAY.acOrigin });
+  enter('#ac', { clipPath: 'inset(0% 0% 100% 0% round 28px)', y: -14, opacity: 0 },
+    { clipPath: 'inset(0% 0% 0% 0% round 28px)', y: 0, opacity: 1, duration: 0.5 }, 2.62);
+  enter('#ac .row', { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.4, stagger: 0.05 }, 2.66);
+  enter('#achl', { opacity: 0 }, { opacity: 1, duration: 0.15, ease: 'none' }, 2.88);
+  sfx(2.62, 'swish', { f: 1.3 });
+  tl.to('#sbar1', { scale: 0.975, duration: 0.08, ease: 'power2.out' }, 3.1);
+  tl.to('#sbar1', { scale: 1, duration: 0.25, ease: 'back.out(3)' }, 3.18);
+  tl.to('#achl', { backgroundColor: '#D2E3FC', duration: 0.08, ease: 'none' }, 3.1);
+  sfx(3.1, 'click');
+
+  // ud: zoom igennem søgefeltet
+  tl.to(['#h1', '#live'], { y: -70, opacity: 0, filter: 'blur(12px)', duration: 0.34, ease: 'power2.in' }, 3.26);
+  tl.to(['#sbar1', '#ac'], { scale: 1.6, opacity: 0, filter: 'blur(18px)', duration: 0.32, ease: 'power3.in' }, 3.3);
+  tl.to('#mq', { opacity: 0, duration: 0.3, ease: 'power1.in' }, 3.28);
+  sfx(3.22, 'whoosh', { d: 0.5, f: 1.2 });
+  hide('#s1', 3.64);
+
+  // =========================================================
+  // S2 · 3.30–5.86 · "Finder de dig – eller din konkurrent?"
+  // =========================================================
+  show('#s2', 3.3);
+  gsap.set('#serp2', { transformPerspective: 1800, ...LAY.serp2 });
+  enter('#serp2', { opacity: 0, scale: 0.8, x: -90 }, { opacity: 1, scale: 1, x: 0, duration: 0.85 }, 3.36);
+  enter('#serp2 .sbar', { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, 3.4);
+  enter('#serp2 .tabs', { opacity: 0 }, { opacity: 1, duration: 0.4, ease: 'power1.out' }, 3.5);
+  enter('#serp2 .card', { y: 90, opacity: 0, rotateX: -28 }, { y: 0, opacity: 1, rotateX: 0, duration: 0.7, stagger: 0.07 }, 3.46);
+  [0, 1, 2, 3].forEach((k) => sfx(3.46 + k * 0.07, 'tick', { p: k }));
+  hooks.push((t) => gsap.set('#serp2', { y: Math.sin(t * 1.3) * 6 }));
+
+  const S2 = COPY.s2, B2 = cw(S2.b.cue), D2 = cw(S2.d.cue);
+  rise(I('#s2t .a'), cw(S2.a.cue) - 0.05, { st: 0.06 });
+  gsap.set('#s2t .b', { transformOrigin: '0% 60%' });
+  slam('#s2t .b', B2 - 0.07);
+  punch(B2 - 0.03, 1.045); shake(B2, 10); accent(B2 - 0.03, 0.8, 76);
+  const you2 = $('#serp2 .you');
+  tl.to(you2, { boxShadow: '0 0 0 5px #4285F4, 0 20px 60px rgba(66,133,244,.3)', duration: 0.25, ease: 'power2.out' }, B2);
+  rise(I('#s2t .c'), cw(S2.c.cue) - 0.05, { st: 0.06 });
+  rise(I('#s2t .d'), D2 - 0.1, { st: 0.03, d: 0.55, rot: 12 });
+  tl.to('#s2t .b', { opacity: 0.22, duration: 0.4, ease: 'power2.out' }, D2);
+  punch(D2 - 0.02, 1.03); shake(D2, 8); accent(D2 - 0.03, 0.65, 72);
+  tl.to(you2, { y: 260, rotate: 8, opacity: 0.12, duration: 0.7, ease: 'power3.in' }, D2 - 0.05);
+  sfx(D2, 'fall');
+  tl.to('#serp2 .card.k', { boxShadow: '0 0 0 4px rgba(234,67,53,.95), 0 20px 60px rgba(234,67,53,.25)', duration: 0.3, stagger: 0.05, ease: 'power2.out' }, D2 + 0.05);
+
+  // overgang: fire Google-farvebånd
+  const bands = $$('#wipe i');
+  gsap.set(bands, { xPercent: -101 });
+  tl.to(bands, { xPercent: 0, duration: 0.3, ease: 'power3.in', stagger: 0.045 }, 5.42);
+  hide('#s2', 5.86);
+  tl.to(bands, { xPercent: 101, duration: 0.4, ease: 'power3.out', stagger: 0.045 }, 5.87);
+  sfx(5.4, 'whoosh', { d: 0.9, f: 1.0 });
+  sfx(5.4, 'riser', { d: 0.5 });
+
+  // =========================================================
+  // S3 · 5.86–10.00 · "Med Google Ads fra O M N står du øverst – præcis når kunden søger."
+  // =========================================================
+  show('#s3', 5.86);
+  rise(I('#gads .t'), w('l3', 1) - 0.08, { st: 0.03, d: 0.65, rot: 10 });
+  enter('#gads .bar', { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: 'expo.inOut' }, w('l3', 2));
+  rise(I('#gads .fra'), w('l3', 3) - 0.05);
+  const omnL = $$('#gads .omn span');
+  [4, 5, 6].forEach((wi, k) => {
+    enter(omnL[k], { scale: 0, rotate: -25 }, { scale: 1, rotate: 0, duration: 0.45, ease: 'back.out(2.6)' }, w('l3', wi) - 0.06);
+    sfx(w('l3', wi) - 0.05, 'pop', { p: k + 1 });
+  });
+  gsap.set('#gads', { transformOrigin: '0% 0%' });
+  tl.to('#gads', { ...LAY.gadsShrink, duration: 0.45, ease: 'expo.inOut' }, 7.24);
+
+  const S3 = COPY.s3, OV = cw(S3.ov.cue);
+  rise(I('#s3l .star'), cw(S3.star.cue) - 0.07, { st: 0.05 });
+  gsap.set('#s3l .ov', { transformOrigin: '0% 55%' });
+  slam('#s3l .ov', OV - 0.07, { s: 1.7 });
+  punch(OV - 0.03, 1.055); shake(OV, 15); accent(OV - 0.04, 1, 81);
+  const capw = I('#s3l .cap');
+  S3.cap.cues.forEach((c, k) => rise(capw[k], cw(c) - 0.05, { d: 0.55 }));
+  enter('#s3l .cap .mk', { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: 'expo.inOut' }, cw(S3.cap.hlCue) + 0.04);
+  tl.to('#s3l .cap .hi .i', { color: '#fff', duration: 0.25, ease: 'power1.out' }, cw(S3.cap.hlCue) + 0.2);
+
+  gsap.set('#serp3', { transformPerspective: 1800, ...LAY.serp3 });
+  enter('#serp3', { opacity: 0, x: 140 }, { opacity: 1, x: 0, duration: 0.9 }, 5.92);
+  enter('#serp3 .card', { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.06 }, 5.98);
+  hooks.push((t) => gsap.set('#serp3', { y: Math.sin(t * 1.2 + 1) * 7 }));
+  gsap.set('#you3 .ring', { opacity: 0 });
+  gsap.set('#rank', { scale: 0 });
+  const UP = 7.3;
+  tl.to('#you3', { y: -408, duration: 0.75, ease: 'expo.inOut' }, UP);
+  tl.to('#you3', { scale: 1.07, duration: 0.375, ease: 'power2.out', yoyo: true, repeat: 1 }, UP);
+  tl.to(['#k31', '#k32', '#k33'], { y: 136, duration: 0.75, ease: 'expo.inOut', stagger: 0.04 }, UP + 0.05);
+  tl.to(['#k31', '#k32', '#k33'], { opacity: 0.5, duration: 0.5, ease: 'power1.out' }, UP + 0.3);
+  tl.to('#you3 .ring', { opacity: 1, duration: 0.3, ease: 'power1.out' }, UP + 0.45);
+  sfx(UP, 'up');
+  tl.to('#rank', { scale: 1, duration: 0.5, ease: 'back.out(2.6)' }, OV - 0.04);
+  sfx(OV + 0.05, 'ding');
+
+  // markør klikker "Ring nu"
+  gsap.set('#cursor', { x: LAY.cursor.from[0], y: LAY.cursor.from[1], opacity: 0, transformOrigin: '20% 10%' });
+  // klikket følger evt. et ord i speaken, men senest 9,36 s, så ripplen dækker skærmen før scene 4
+  const CLICK = S3.click ? Math.min(9.36, cw(S3.click)) : 9.36;
+  tl.to('#cursor', { opacity: 1, duration: 0.2, ease: 'none' }, CLICK - 0.86);
+  tl.to('#cursor', { x: LAY.cursor.to[0], y: LAY.cursor.to[1], duration: 0.8, ease: 'power3.inOut' }, CLICK - 0.86);
+  tl.to('#cursor', { scale: 0.8, duration: 0.07, ease: 'power2.out' }, CLICK);
+  tl.to('#cursor', { scale: 1, duration: 0.2, ease: 'back.out(3)' }, CLICK + 0.08);
+  tl.to('#call', { scale: 0.92, backgroundColor: '#2B8C45', duration: 0.07, ease: 'power2.out' }, CLICK);
+  tl.to('#call', { scale: 1, duration: 0.25, ease: 'back.out(3)' }, CLICK + 0.08);
+  sfx(CLICK, 'click');
+  gsap.set('#ripple', { scale: 0 });
+  tl.to('#ripple', { scale: 25, duration: 0.56, ease: 'expo.in' }, CLICK + 0.08);
+  sfx(CLICK + 0.1, 'swell', { d: 0.55 });
+  hide('#s3', 9.99);
+
+  // =========================================================
+  // S4 · 9.99–12.40 · "Tømrer. Maler. Murer. VVS."
+  // =========================================================
+  show('#s4', 9.99);
+  tl.set('#ripple', { opacity: 0 }, 10.0);
+  const P = ['#p1', '#p2', '#p3', '#p4'];
+  // panel-tider: ord i én speak-sætning (copy.js → s4.cues) eller starten af klip t1–t4
+  const TT = COPY.s4?.cues ? COPY.s4.cues.map(cw) : [C.t1.start, C.t2.start, C.t3.start, C.t4.start];
+  // soft: alle paneler glider ind fra højre, og det forrige glider med ud, så bevægelsen flyder i én retning
+  const clipFrom = SOFT ? [null, ...Array(3).fill('inset(0% 0% 0% 100%)')] : [null, 'inset(0% 0% 0% 100%)', 'inset(100% 0% 0% 0%)', 'inset(0% 100% 0% 0%)'];
+  P.forEach((p, k) => {
+    const t = TT[k];
+    if (k > 0) {
+      // varighed af panel-skiftet; soft: længere, men aldrig over godt halvdelen af tiden siden forrige ord
+      const WD = SOFT ? clamp((t - TT[k - 1]) * 0.55, 0.25, 0.45) : 0.3;
+      gsap.set(p, { clipPath: clipFrom[k] });
+      tl.to(p, { clipPath: 'inset(0% 0% 0% 0%)', duration: WD, ease: SOFT ? 'power2.inOut' : 'expo.inOut' }, t - WD);
+      if (SOFT) tl.to($$(['.icon', '.word', '.chip'].map((c) => `${P[k - 1]} ${c}`).join(',')), { x: -160, duration: WD, ease: 'power2.in' }, t - WD);
+      sfx(t - WD, 'swish', { f: 0.9 + k * 0.12 });
+    }
+    rise(I(p + ' .word'), t - 0.13, { st: 0.035, d: 0.5, rot: 14 });
+    const paths = $$(p + ' .icon path');
+    gsap.set(paths, { strokeDasharray: 1, strokeDashoffset: 1 });
+    tl.to(paths, { strokeDashoffset: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }, t - 0.15);
+    enter(p + ' .icon', { scale: 0.6, rotate: SOFT ? 0 : -20, opacity: 0 }, { scale: 1, rotate: 0, opacity: 1, duration: 0.5, ease: SOFT ? 'power3.out' : 'back.out(2)' }, t - 0.15);
+    enter(p + ' .chip', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }, t - 0.04);
+    const tq = $(p + ' .tq'); typeHook(tq, tq.dataset.text, t + 0.02, 0.02, false);
+    const bgw = $$(p + ' .bgw');
+    ft(bgw[0], { x: -200 }, { x: -900, duration: 2.8, ease: 'none' }, t - 0.4);
+    ft(bgw[1], { x: -1100 }, { x: -400, duration: 2.8, ease: 'none' }, t - 0.4);
+    punch(t - 0.03, 1.035, 0.45); shake(t - 0.01, 9);
+    accent(t - 0.03, 0.75, [69, 72, 76, 81][k]);
+  });
+
+  // =========================================================
+  // S5 · 11.92–15.95 · "Flere opkald. Flere tilbud. Flere opgaver."
+  // =========================================================
+  // start for scene 5: copy.js → s5.at (standard 11,92), så scene 4 kan få lidt længere tid
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const S5T = COPY.s5?.at ?? 11.92, s5 = (d) => r3(S5T + d);
+  show('#s5', S5T);
+  gsap.set('#s5', { clipPath: `circle(0% at ${LAY.iris})` });
+  tl.to('#s5', { clipPath: `circle(150% at ${LAY.iris})`, duration: 0.55, ease: 'expo.inOut' }, S5T);
+  sfx(s5(-0.02), 'whoosh', { d: 0.6, f: 0.7 });
+  hide('#s4', s5(0.58));
+  tl.to('#s5bg', { opacity: 0, duration: 0.5, ease: 'power1.inOut' }, s5(0.58));
+
+  const cpath = $('#cpath'); const L = cpath.getTotalLength();
+  const chead = $('#chead'), chalo = $('#chalo'), crect = $('#cclipr');
+  cpath.style.strokeDasharray = L;
+  const cease = gsap.parseEase('power2.inOut');
+  hooks.push((t) => {
+    const p = cease(clamp((t - s5(0.18)) / r3(15.4 - s5(0.18)), 0, 1));   // grafen når toppen ved 15,4 s
+    cpath.style.strokeDashoffset = L * (1 - p);
+    const pt = cpath.getPointAtLength(L * p);
+    chead.setAttribute('cx', pt.x); chead.setAttribute('cy', pt.y);
+    chalo.setAttribute('cx', pt.x); chalo.setAttribute('cy', pt.y);
+    const ph = (t * 1.5) % 1; chalo.setAttribute('r', 14 + ph * 34); chalo.setAttribute('stroke-opacity', (1 - ph) * 0.6);
+    crect.setAttribute('width', pt.x);
+    chead.style.opacity = p > 0.001 ? 1 : 0; chalo.style.opacity = chead.style.opacity;
+  });
+
+  enter('#s5l .lab', { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.6 }, s5(0.23));
+  hooks.push((t) => { $('#s5l .lab i').style.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(t * 7)); });
+  gsap.set('#flere', { transformOrigin: '0% 70%' });
+  // "flere" og navneordene: ord i én speak-sætning (copy.js → s5.cues) eller klip f1–f3
+  const FL = COPY.s5?.cues ? COPY.s5.cues.flere.map(cw) : [w('f1', 0), w('f2', 0), w('f3', 0)];
+  const FN = COPY.s5?.cues ? COPY.s5.cues.noun.map(cw) : [w('f1', 1), w('f2', 1), w('f3', 1)];
+  rise(I('#flere'), FL[0] - 0.06, { st: 0.04, d: 0.6, rot: 10 });
+  gsap.set('#slot .list', { y: 236 });
+  tl.to('#slot .list', { y: 0, duration: 0.5, ease: 'expo.out' }, FN[0] - 0.08);
+  tl.to('#slot .list', { y: -236, duration: 0.5, ease: 'expo.inOut' }, FN[1] - 0.22);
+  tl.to('#slot .list', { y: -472, duration: 0.5, ease: 'expo.inOut' }, FN[2] - 0.22);
+  [FL[1], FL[2]].forEach((t) => ft('#flere', { scale: SOFT ? 1.03 : 1.06 }, { scale: 1, duration: 0.5 }, t));
+  FN.forEach((t, k) => { punch(t - 0.04, 1.025, 0.5); accent(t - 0.05, 0.5, [72, 76, 79][k]); });
+
+  const { fromY, ...phoneT } = LAY.phone;
+  gsap.set('#phonewrap', { transformPerspective: 1800, ...phoneT });
+  enter('#phonewrap', { y: 180, opacity: 0, rotateY: fromY }, { y: 0, opacity: 1, rotateY: phoneT.rotateY, duration: 0.95 }, s5(0.06));
+  hooks.push((t) => gsap.set('#phone', { y: Math.sin(t * 1.6) * 9 }));
+  // notifikationer følger "flere"-ordene, når speaken er én sætning
+  const N = ['#n1', '#n2', '#n3'], NT = COPY.s5?.cues ? FL.map((t) => t + 0.1) : [12.56, 13.56, 14.56];
+  const RING = r3(NT[0] + 0.02);
+  tl.to('#phone', {
+    keyframes: [3, -3, 3, -3, 2.5, -2.5, 2, -2, 0].map((r) => ({ rotate: r, duration: 0.05 })), ease: 'none',
+  }, r3(RING + 0.04));
+  ['#wv1', '#wv2', '#wv3'].forEach((v, k) => enter(v, { scale: 0.7, opacity: 0.9 }, { scale: 1.9, opacity: 0, duration: 1.0, ease: 'power2.out' }, r3(RING + 0.02 + k * 0.2)));
+  gsap.set(['#wv1', '#wv2', '#wv3'], { opacity: 0 });
+  sfx(RING, 'ring');
+
+  N.forEach((n, k) => {
+    enter(n, { opacity: 0, y: -50, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: 'back.out(1.7)' }, NT[k]);
+    for (let j = 0; j < k; j++) tl.to(N[j], { y: (k - j) * 124, duration: 0.45, ease: 'expo.out' }, NT[k]);
+    if (k) sfx(NT[k], 'notif', { p: k });
+  });
+
+  const trades = COPY.s5?.ticker || ['TØMRER', 'MALER', 'MURER', 'VVS', 'ELEKTRIKER', 'TAGDÆKKER', 'SNEDKER', 'GULVLÆGGER', 'KLOAKMESTER', 'ANLÆGSGARTNER', 'GLARMESTER', 'SMED'];
+  $('#run').innerHTML = Array(3).fill(trades.map((x) => `<b>${x}</b>&nbsp;&nbsp;•&nbsp;&nbsp;`).join('')).join('');
+  gsap.set('#run', { x: 360 });
+  enter('#ticker', { y: 90, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, s5(0.38));
+  tl.to(['#hud .bl', '#hud .br'], { opacity: 0, duration: 0.3, ease: 'power1.out' }, s5(0.18));
+  ft('#run', { x: 360 }, { x: -1100, duration: 4, ease: 'none' }, s5(0.08));
+
+  // ud: alt samles mod midten
+  tl.to(['#s5l', '#phonewrap', '#ticker', '#chart'], { scale: (i, el) => gsap.getProperty(el, 'scale') * 0.9, opacity: 0, filter: 'blur(14px)', duration: 0.45, ease: 'power3.in', stagger: 0.03 }, 15.45);
+  hide('#s5', 16.0);
+
+  // =========================================================
+  // S6 · 15.45–20.00 · "O M N. Online Marketing Nu."
+  // =========================================================
+  const bars = $$('#bars i');
+  const corners = [[-60, -60], [SW + 60, -60], [SW + 60, SH + 60], [-60, SH + 60]];
+  bars.forEach((b, k) => gsap.set(b, { left: corners[k][0] - 18, top: corners[k][1] - 18, width: 36, height: 36, borderRadius: 18, visibility: 'hidden' }));
+  tl.set(bars, { visibility: 'visible' }, 15.45);
+  bars.forEach((b, k) => tl.to(b, { left: CX + (k - 1.5) * 58 - 18, top: CY - 18, duration: 0.5, ease: 'expo.in' }, 15.45 + k * 0.02));
+  sfx(15.3, 'riser', { d: 0.65 });
+  const IMPACT = 15.98;
+  show('#s6', 15.9);
+  sfx(IMPACT, SOFT ? 'bloom' : 'impact');
+  punch(IMPACT, 1.07, 0.9); shake(IMPACT, 16);
+  enter('#flash', { opacity: 0 }, { opacity: SOFT ? 0.2 : 0.45, duration: 0.05, ease: 'none' }, IMPACT);
+  tl.to('#flash', { opacity: 0, duration: 0.5, ease: 'power2.out' }, IMPACT + 0.05);
+  ['#bu1', '#bu2'].forEach((b, k) => enter(b, { scale: 0, opacity: 1 }, { scale: 2.6 + k, opacity: 0, duration: 0.9 + k * 0.2, ease: 'expo.out' }, IMPACT + k * 0.06));
+
+  const BAR_Y = LAY.logoBarY;
+  bars.forEach((b, k) => tl.to(b, { left: CX - 221 + 114 * k, top: BAR_Y, width: 100, height: 18, borderRadius: 9, duration: 0.7, ease: 'expo.inOut' }, 16.2 + k * 0.04));
+  const logoL = I('#logo');
+  [0, 1, 2].forEach((k) => {
+    ft(logoL[k], { yPercent: 115, rotate: 8, scale: 1.2 }, { yPercent: 0, rotate: 0, scale: 1, duration: 0.8, ease: 'expo.out' }, w('l6', k) - 0.05);
+    if (k) accent(w('l6', k) - 0.04, 0.35, [0, 76, 79][k]);
+  });
+  const onw = I('#oname');
+  COPY.s6.oname.cues.forEach((c, k) => rise(onw[k], cw(c) - 0.06, { d: 0.7 }));
+  const NU = C.l6.words.at(-1).t;   // sidste ord i speaken
+  enter('#tag', { opacity: 0, letterSpacing: '.7em' }, { opacity: 1, letterSpacing: '.3em', duration: 1.1 }, COPY.s6.tag.cue ? cw(COPY.s6.tag.cue) : NU + 0.12);
+  enter('#sbar6', { opacity: 0, y: 46, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.7 }, NU + 0.28);
+  sfx(NU + 0.28, 'swish', { f: 1.1 });
+  const t6 = typeHook($('#q6'), 'onlinemarketing.nu', NU + 0.5, 0.033);
+  caretHook($('#c6'), NU + 0.35, 20.1, t6[t6.length - 1]);
+  gsap.set(logoL, { backgroundPosition: '100% 0%' });
+  tl.to(logoL, { backgroundPosition: '0% 0%', duration: 1.0, ease: 'power2.inOut', stagger: 0.07 }, NU + 0.6);
+  sfx(NU + 0.6, 'shine');
+  bars.forEach((b, k) => {
+    tl.to(b, { y: -16, duration: 0.16, ease: 'power2.out' }, 19.45 + k * 0.07);
+    tl.to(b, { y: 0, duration: 0.2, ease: 'power2.in' }, 19.61 + k * 0.07);
+    sfx(19.45 + k * 0.07, 'pop', { p: k, soft: 1 });
+  });
+
+  // =========================================================
+  // Globalt: HUD, kamera, baggrund
+  // =========================================================
+  tl.to('#hud .abs:not(#prog)', { opacity: 0, duration: 0.4, ease: 'power1.in' }, 15.55);
+  const scenes = [[0, '01 / SØGNINGEN'], [3.3, '02 / KONKURRENTEN'], [5.86, '03 / GOOGLE ADS'], [9.99, COPY.s4?.label || '04 / FAGENE'], [S5T, '05 / RESULTATER'], [15.9, '06 / OMN']];
+  const pad = (n) => String(n).padStart(2, '0');
+  hooks.push((t) => {
+    $('#prog').style.transform = `scaleX(${clamp(t / DUR, 0, 1)})`;
+    $('#tc').textContent = `00:${pad(Math.floor(t))}.${pad(Math.floor((t % 1) * 100))}`;
+    let s = scenes[0][1]; scenes.forEach(([st, n]) => { if (t >= st) s = n; });
+    $('#scn').textContent = s;
+    const z = 1 + 0.04 * cease(clamp((t - 16.2) / 3.8, 0, 1));
+    const breathe = SOFT ? 1 + 0.012 * Math.sin(t * 0.55) : 1;   // soft: langsom, konstant zoom-bølge
+    gsap.set('#cam', { x: Math.sin(t * 0.7) * 10, y: Math.cos(t * 0.55) * 7, rotate: Math.sin(t * 0.4) * 0.3, scale: z * breathe });
+    gsap.set('#dotgrid', { x: -((t * 18) % 48), y: -((t * 11) % 48) });
+    $$('.blob').forEach((b, k) => gsap.set(b, { x: Math.sin(t * 0.35 + k * 1.7) * 90, y: Math.cos(t * 0.3 + k * 2.1) * 70 }));
+  });
+
+  // ripple-centrum: mål "Ring nu"-knappens skærmposition i klik-øjeblikket
+  tl.seek(CLICK, true);
+  const r = $('#call').getBoundingClientRect();
+  gsap.set('#ripple', { left: r.left + r.width / 2, top: r.top + r.height / 2 });
+  tl.seek(0, true);
+
+  window.DUR = DUR;
+  window.SFX = SFX.sort((a, b) => a.t - b.t);
+  window.seek = (t) => { tl.seek(t, true); hooks.forEach((h) => h(t)); };
+  window.seek(0);
+  window.READY = true;
+
+  // forhåndsvisning i browser: index.html?play eller ?t=7.9
+  const q = new URLSearchParams(location.search);
+  if (q.has('t')) window.seek(parseFloat(q.get('t')));
+  if (q.has('play')) {
+    const t0 = performance.now();
+    const loop = () => { const t = ((performance.now() - t0) / 1000) % DUR; window.seek(t); requestAnimationFrame(loop); };
+    loop();
+  }
+};
+
+Promise.all([
+  document.fonts.load('900 100px "Inter Tight"'),
+  document.fonts.load('300 100px "Inter Tight"'),
+  document.fonts.load('500 20px "JetBrains Mono"'),
+]).then(() => document.fonts.ready).then(BUILD);

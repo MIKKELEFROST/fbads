@@ -1,0 +1,6 @@
+# afledte lydfiler – genskabes af tools/measure.py og tools/mix_audio.py
+audio/*/vo/*.wav
+audio/*/stem_*.wav
+audio/*/mix_raw.wav
+audio/*/mix.wav
+__pycache__/
