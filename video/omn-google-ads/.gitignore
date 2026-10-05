@@ -3,3 +3,4 @@ audio/*/vo/*.wav
 audio/*/stem_*.wav
 audio/*/mix_raw.wav
 audio/*/mix.wav
+__pycache__/

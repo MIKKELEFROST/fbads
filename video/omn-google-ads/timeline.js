@@ -6,6 +6,20 @@
  * skærmteksterne fra variants/<v>/copy.js – vælg version med index.html?v=v2.
  * Lydeffekter registreres med sfx() og hentes af render.mjs til lydmixet.
  */
+// streg-ikoner til fag-scenen (viewBox 64×64), valgt med navn i copy.js → s4.panels[].icon
+const ICONS = {
+  hammer: ['M34.3 9.9L54.1 29.7 45.7 38.1 25.9 18.3Z', 'M10 54L35.6 28.4'],
+  roller: ['M12 10h34a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4z', 'M50 17h6v14H32v8', 'M32 39v16'],
+  brick: ['M8 12h48v40H8z', 'M8 25.3h48M8 38.6h48', 'M24 12v13.3M40 12v13.3M16 25.3v13.3M32 25.3v13.3M48 25.3v13.3M24 38.6V52M40 38.6V52'],
+  drop: ['M32 7C32 7 14 28 14 40a18 18 0 0 0 36 0C50 28 32 7 32 7z', 'M23 41a9 9 0 0 0 9 9'],
+  ladder: ['M20 6v52M44 6v52', 'M20 16h24M20 28h24M20 40h24M20 52h24'],
+  window: ['M14 8h36v42H14z', 'M32 8v42M14 29h36', 'M9 56h46'],
+  house: ['M6 32L32 9l26 23', 'M13 26v30h38V26', 'M27 56V41h10v15'],
+  roof: ['M4 40L32 14l28 26', 'M44 25V12h8v20.4', 'M12 32.6V56h40V32.6'],
+  floor: ['M20 14h24l14 42H6z', 'M28 14l-6 42M36 14l6 42', 'M12.7 36h38.6'],
+  deck: ['M8 22h48', 'M12 22v34M52 22v34', 'M22 22v18M32 22v18M42 22v18', 'M6 40h52'],
+};
+
 const BUILD = () => {
   const DUR = 20;
   const C = window.CUES;
@@ -55,8 +69,20 @@ const BUILD = () => {
     $('#cclipr').setAttribute('height', 1920);
   }
 
-  // ---------- skærmtekster fra copy.js ----------
-  $$('[data-copy]').forEach((el) => { el.textContent = el.dataset.copy.split('.').reduce((o, k) => o[k], COPY); });
+  // ---------- skærmtekster fra copy.js (mangler en tekst i copy.js, bruges index.html's) ----------
+  $$('[data-copy]').forEach((el) => {
+    const v = el.dataset.copy.split('.').reduce((o, k) => o?.[k], COPY);
+    if (v != null) el.textContent = v;
+  });
+  // fag-scenen (S4): ord, ikon og søgning pr. panel – uden COPY.s4 vises Tømrer/Maler/Murer/VVS
+  (COPY.s4?.panels || []).forEach((pc, k) => {
+    const p = $(`#p${k + 1}`);
+    $('.word span', p).textContent = pc.word;
+    const rep = Math.ceil(28 / (pc.word.length + 1));
+    $$('.bgw', p).forEach((b) => { b.textContent = Array(rep).fill(pc.word.toUpperCase()).join(' '); });
+    $('.icon', p).innerHTML = ICONS[pc.icon].map((d) => `<path pathLength="1" d="${d}"/>`).join('');
+    $('.tq', p).dataset.text = pc.q;
+  });
   $$('#ac .acq').forEach((el, k) => {
     const [plain, bold] = COPY.ac[k];
     const b = document.createElement('b'); b.textContent = bold;
@@ -67,6 +93,7 @@ const BUILD = () => {
   if (COPY.h1.size) gsap.set('#h1', { fontSize: sz(COPY.h1.size) });
   if (COPY.s2.b.size) gsap.set('#s2t .b', { fontSize: sz(COPY.s2.b.size) });
   if (COPY.s6.oname.size) gsap.set('#oname', { fontSize: sz(COPY.s6.oname.size) });
+  if (COPY.s4?.size) gsap.set('.panel .word', { fontSize: sz(COPY.s4.size) });
 
   // ---------- tekst-split ----------
   const wrap = (txt) => {
@@ -359,7 +386,7 @@ const BUILD = () => {
     if (k) sfx(NT[k], 'notif', { p: k });
   });
 
-  const trades = ['TØMRER', 'MALER', 'MURER', 'VVS', 'ELEKTRIKER', 'TAGDÆKKER', 'SNEDKER', 'GULVLÆGGER', 'KLOAKMESTER', 'ANLÆGSGARTNER', 'GLARMESTER', 'SMED'];
+  const trades = COPY.s5?.ticker || ['TØMRER', 'MALER', 'MURER', 'VVS', 'ELEKTRIKER', 'TAGDÆKKER', 'SNEDKER', 'GULVLÆGGER', 'KLOAKMESTER', 'ANLÆGSGARTNER', 'GLARMESTER', 'SMED'];
   $('#run').innerHTML = Array(3).fill(trades.map((x) => `<b>${x}</b>&nbsp;&nbsp;•&nbsp;&nbsp;`).join('')).join('');
   gsap.set('#run', { x: 360 });
   enter('#ticker', { y: 90, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, 12.3);
@@ -415,7 +442,7 @@ const BUILD = () => {
   // Globalt: HUD, kamera, baggrund
   // =========================================================
   tl.to('#hud .abs:not(#prog)', { opacity: 0, duration: 0.4, ease: 'power1.in' }, 15.55);
-  const scenes = [[0, '01 / SØGNINGEN'], [3.3, '02 / KONKURRENTEN'], [5.86, '03 / GOOGLE ADS'], [9.99, '04 / FAGENE'], [11.92, '05 / RESULTATER'], [15.9, '06 / OMN']];
+  const scenes = [[0, '01 / SØGNINGEN'], [3.3, '02 / KONKURRENTEN'], [5.86, '03 / GOOGLE ADS'], [9.99, COPY.s4?.label || '04 / FAGENE'], [11.92, '05 / RESULTATER'], [15.9, '06 / OMN']];
   const pad = (n) => String(n).padStart(2, '0');
   hooks.push((t) => {
     $('#prog').style.transform = `scaleX(${clamp(t / DUR, 0, 1)})`;

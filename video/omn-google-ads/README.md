@@ -7,6 +7,8 @@ clean stil, dansk speak, musik og lydeffekter:
 |---|---|---|---|
 | v1 | "Lige nu søger nogen på Google efter en tømrer i nærheden." | [`out/omn-google-ads-v1-9x16.mp4`](out/omn-google-ads-v1-9x16.mp4) | [`out/omn-google-ads-v1-16x9.mp4`](out/omn-google-ads-v1-16x9.mp4) |
 | v2 | "Bliver du fundet, når nogen søger efter en lokal tømrer?" | [`out/omn-google-ads-v2-9x16.mp4`](out/omn-google-ads-v2-9x16.mp4) | [`out/omn-google-ads-v2-16x9.mp4`](out/omn-google-ads-v2-16x9.mp4) |
+| v3 | "Er du maler?" – hele filmen handler om malere | [`out/omn-google-ads-v3-9x16.mp4`](out/omn-google-ads-v3-9x16.mp4) | [`out/omn-google-ads-v3-16x9.mp4`](out/omn-google-ads-v3-16x9.mp4) |
+| v4 | "Er du tømrer?" – hele filmen handler om tømrere | [`out/omn-google-ads-v4-9x16.mp4`](out/omn-google-ads-v4-9x16.mp4) | [`out/omn-google-ads-v4-16x9.mp4`](out/omn-google-ads-v4-16x9.mp4) |
 
 I 9:16 ligger tekst og vigtige elementer mellem ca. 250 og 1500 px fra toppen, så de ikke
 dækkes af appens knapper.
@@ -24,6 +26,21 @@ Scenerne og tiderne er de samme i alle versioner; speak og skærmtekst skifter.
 | 12–15,9 | Telefon, notifikationer, graf | Flere opkald. Flere tilbud. Flere opgaver. | (samme) |
 | 15,9–20 | Logo og onlinemarketing.nu | O M N – Online Marketing Nu. | O M N – Google Ads til håndværkere. |
 
+### v3 og v4 – ét fag i fokus
+
+v3 (maler) og v4 (tømrer) har samme manus, så de kan testes direkte mod hinanden; kun faget
+skifter. Søgning, autoudfyld, søgeresultater, opgaverne i scene 4, notifikationen, tickeren og
+slutkortet følger faget.
+
+| Tid | v3 – maler | v4 – tømrer |
+|---|---|---|
+| 0–3,3 | Er du maler? Dine næste kunder søger på Google. | Er du tømrer? Dine næste kunder søger på Google. |
+| 3,3–5,9 | Men lige nu går opgaven til din konkurrent. | (samme) |
+| 5,9–10 | Med Google Ads fra OMN kommer du øverst – og det er dig, de ringer til. | (samme) |
+| 10–12 | Vægge. Lofter. Vinduer. Facader. | Tag. Gulve. Vinduer. Terrasse. |
+| 12–15,9 | Flere opkald. Flere tilbud. Flere opgaver. | (samme) |
+| 15,9–20 | O M N – Google Ads til malere. | O M N – Google Ads til tømrere. |
+
 Stemme: Microsoft neural TTS `da-DK-JeppeNeural`. Musik og lydeffekter er syntetiseret i
 `tools/mix_audio.py` – ingen licenserede samples. Fonte: Inter Tight og JetBrains Mono (OFL).
 Konkurrenterne i søgeresultaterne er fiktive ("Konkurrent ApS" osv.), og Googles logo er ikke
@@ -38,20 +55,25 @@ billedet til tiden `t`, og `tools/render.cjs` tager et skærmbillede pr. frame i
 En version er en mappe i `variants/`:
 
 - `lines.json` – manus: tekst, taletempo og starttid (`at`, sekunder) for hvert speak-klip
-- `copy.js` – teksterne på skærmen og hvilke ord i speaken de følger
+- `copy.js` – teksterne på skærmen og hvilke ord i speaken de følger. Ud over overskrifterne kan
+  en version også skifte baggrundsteksten i scene 1 (`s1.mq`), søgeresultaterne (`serp`),
+  panelerne i scene 4 (`s4.panels`: ord, ikon og søgning), notifikation og ticker (`s5`) og
+  topteksten (`hud`); mangler et felt, bruges teksten i `index.html`. Se `variants/v3/copy.js`.
+  Ikonerne til scene 4 vælges med navn fra `ICONS` øverst i `timeline.js`.
 - `cues.js` – ordtider, genereres af `tools/build_cues.py`
 
-Lyd for versionen ligger i `audio/<v>/`. Scene 3 forudsætter, at klip `l3` begynder med "Med
+Et speak-klip kan deles i flere (v3/v4 har `l1` + `l1b`), hvis pausen efter et spørgsmål bliver
+for lang. Lyd for versionen ligger i `audio/<v>/`. Scene 3 forudsætter, at klip `l3` begynder med "Med
 Google Ads fra O M N", og logoet, at `l6` begynder med "O M N".
 
 ## Ny version
 
-Kopiér `variants/v2` til fx `variants/v3`, ret `lines.json` og `copy.js`, og kør:
+Kopiér fx `variants/v3` til `variants/v5`, ret `lines.json` og `copy.js`, og kør:
 
 ```bash
 pip install edge-tts numpy scipy          # + ffmpeg, node, playwright
 cd video/omn-google-ads
-V=v3
+V=v5
 
 # 1. Speak og ordtider (build_cues advarer, hvis to klip overlapper)
 (cd tools && CA_BUNDLE=... python3 tts.py $V && python3 measure.py $V && python3 build_cues.py $V)

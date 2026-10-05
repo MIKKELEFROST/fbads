@@ -1,0 +1,62 @@
+{
+ "l1": {
+  "text": "Er du tømrer?",
+  "rate": "+6%",
+  "at": 0.45
+ },
+ "l1b": {
+  "text": "Dine næste kunder søger på Google.",
+  "rate": "+10%",
+  "at": 1.5
+ },
+ "l2": {
+  "text": "Men lige nu går opgaven til din konkurrent.",
+  "rate": "+8%",
+  "at": 3.45
+ },
+ "l3": {
+  "text": "Med Google Ads fra O M N kommer du øverst – og det er dig, de ringer til.",
+  "rate": "+12%",
+  "at": 5.85
+ },
+ "t1": {
+  "text": "Tag.",
+  "rate": "+10%",
+  "at": 10.0
+ },
+ "t2": {
+  "text": "Gulve.",
+  "rate": "+10%",
+  "at": 10.5
+ },
+ "t3": {
+  "text": "Vinduer.",
+  "rate": "+22%",
+  "at": 11.0
+ },
+ "t4": {
+  "text": "Terrasse.",
+  "rate": "+10%",
+  "at": 11.5
+ },
+ "f1": {
+  "text": "Flere opkald.",
+  "rate": "+6%",
+  "at": 12.5
+ },
+ "f2": {
+  "text": "Flere tilbud.",
+  "rate": "+6%",
+  "at": 13.5
+ },
+ "f3": {
+  "text": "Flere opgaver.",
+  "rate": "+6%",
+  "at": 14.5
+ },
+ "l6": {
+  "text": "O M N – Google Ads til tømrere.",
+  "rate": "+0%",
+  "at": 16.25
+ }
+}
