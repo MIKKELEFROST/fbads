@@ -2,13 +2,16 @@
  *
  * Hele filmen er én pauset GSAP-tidslinje. window.seek(t) tegner præcis billedet
  * til tidspunktet t, så render.mjs kan tage et skærmbillede pr. frame.
- * Tidspunkter for speak kommer fra cues.js (tools/build_cues.py).
+ * Tidspunkter for speak kommer fra variants/<v>/cues.js (tools/build_cues.py) og
+ * skærmteksterne fra variants/<v>/copy.js – vælg version med index.html?v=v2.
  * Lydeffekter registreres med sfx() og hentes af render.mjs til lydmixet.
  */
 const BUILD = () => {
   const DUR = 20;
   const C = window.CUES;
   const w = (k, i) => C[k].words[i].t;
+  const COPY = window.COPY;
+  const cw = ([k, i, off = 0]) => w(k, i) + off;   // cue fra copy.js → tid
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -52,6 +55,19 @@ const BUILD = () => {
     $('#cclipr').setAttribute('height', 1920);
   }
 
+  // ---------- skærmtekster fra copy.js ----------
+  $$('[data-copy]').forEach((el) => { el.textContent = el.dataset.copy.split('.').reduce((o, k) => o[k], COPY); });
+  $$('#ac .acq').forEach((el, k) => {
+    const [plain, bold] = COPY.ac[k];
+    const b = document.createElement('b'); b.textContent = bold;
+    el.textContent = plain; el.appendChild(b);
+  });
+  $('#q2').textContent = COPY.query.text;
+  const sz = (v) => (Array.isArray(v) ? v[V ? 1 : 0] : v);   // [16:9, 9:16] eller ét tal
+  if (COPY.h1.size) gsap.set('#h1', { fontSize: sz(COPY.h1.size) });
+  if (COPY.s2.b.size) gsap.set('#s2t .b', { fontSize: sz(COPY.s2.b.size) });
+  if (COPY.s6.oname.size) gsap.set('#oname', { fontSize: sz(COPY.s6.oname.size) });
+
   // ---------- tekst-split ----------
   const wrap = (txt) => {
     const m = document.createElement('span'); m.className = 'm';
@@ -63,8 +79,8 @@ const BUILD = () => {
     [...t].forEach((ch) => el.appendChild(ch === ' ' ? document.createTextNode(' ') : wrap(ch)));
   });
   $$('[data-w]').forEach((el) => {
-    const t = el.textContent.trim().split(/\s+/); el.textContent = '';
-    t.forEach((wd, k) => { if (k) el.appendChild(document.createTextNode(' ')); el.appendChild(wrap(wd)); });
+    const t = el.textContent.trim(); el.textContent = '';
+    if (t) t.split(/\s+/).forEach((wd, k) => { if (k) el.appendChild(document.createTextNode(' ')); el.appendChild(wrap(wd)); });
   });
   const I = (sel) => $$(sel + ' .i');
 
@@ -138,13 +154,13 @@ const BUILD = () => {
   tl.set('#sd1', { opacity: 1 }, 1.72);
   tl.to(['#sbar1 .mag', '#sbar1 .q'], { opacity: 1, duration: 0.3, ease: 'power1.out' }, 1.38);
 
-  const t1 = typeHook($('#q1'), 'tømrer i nærheden', 1.45, 0.064);
+  const t1 = typeHook($('#q1'), COPY.query.text, COPY.query.at, 0.064);
   caretHook($('#c1'), 1.4, 3.3, t1[t1.length - 1]);
 
   // overskrift, ord for ord i takt med speaken
   const h1w = I('#h1');
-  [0, 1, 2, 3, 4, 5].forEach((k) => rise(h1w[k], w('l1', k) - 0.06, { d: 0.6 }));
-  enter('#h1 .ul', { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: 'expo.inOut' }, w('l1', 5) + 0.12);
+  COPY.h1.cues.forEach((c, k) => rise(h1w[k], cw(c) - 0.06, { d: 0.6 }));
+  enter('#h1 .ul', { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: 'expo.inOut' }, cw(COPY.h1.cues.at(-1)) + 0.12);
   enter('#live', { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.5 }, 1.55);
   hooks.push((t) => { $('#live i').style.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(t * 7)); });
 
@@ -179,19 +195,20 @@ const BUILD = () => {
   [0, 1, 2, 3].forEach((k) => sfx(3.46 + k * 0.07, 'tick', { p: k }));
   hooks.push((t) => gsap.set('#serp2', { y: Math.sin(t * 1.3) * 6 }));
 
-  rise(I('#s2t .a'), w('l2', 0) - 0.05, { st: 0.06 });
+  const S2 = COPY.s2, B2 = cw(S2.b.cue), D2 = cw(S2.d.cue);
+  rise(I('#s2t .a'), cw(S2.a.cue) - 0.05, { st: 0.06 });
   gsap.set('#s2t .b', { transformOrigin: '0% 60%' });
-  slam('#s2t .b', w('l2', 2) - 0.07);
-  punch(w('l2', 2) - 0.03, 1.045); shake(w('l2', 2), 10); sfx(w('l2', 2) - 0.03, 'hit', { g: 0.8 });
+  slam('#s2t .b', B2 - 0.07);
+  punch(B2 - 0.03, 1.045); shake(B2, 10); sfx(B2 - 0.03, 'hit', { g: 0.8 });
   const you2 = $('#serp2 .you');
-  tl.to(you2, { boxShadow: '0 0 0 5px #4285F4, 0 20px 60px rgba(66,133,244,.3)', duration: 0.25, ease: 'power2.out' }, w('l2', 2));
-  rise(I('#s2t .c'), w('l2', 3) - 0.05, { st: 0.06 });
-  rise(I('#s2t .d'), w('l2', 5) - 0.1, { st: 0.03, d: 0.55, rot: 12 });
-  tl.to('#s2t .b', { opacity: 0.22, duration: 0.4, ease: 'power2.out' }, w('l2', 5));
-  punch(w('l2', 5) - 0.02, 1.03); shake(w('l2', 5), 8); sfx(w('l2', 5) - 0.03, 'hit', { g: 0.65 });
-  tl.to(you2, { y: 260, rotate: 8, opacity: 0.12, duration: 0.7, ease: 'power3.in' }, w('l2', 5) - 0.05);
-  sfx(w('l2', 5), 'fall');
-  tl.to('#serp2 .card.k', { boxShadow: '0 0 0 4px rgba(234,67,53,.95), 0 20px 60px rgba(234,67,53,.25)', duration: 0.3, stagger: 0.05, ease: 'power2.out' }, w('l2', 5) + 0.05);
+  tl.to(you2, { boxShadow: '0 0 0 5px #4285F4, 0 20px 60px rgba(66,133,244,.3)', duration: 0.25, ease: 'power2.out' }, B2);
+  rise(I('#s2t .c'), cw(S2.c.cue) - 0.05, { st: 0.06 });
+  rise(I('#s2t .d'), D2 - 0.1, { st: 0.03, d: 0.55, rot: 12 });
+  tl.to('#s2t .b', { opacity: 0.22, duration: 0.4, ease: 'power2.out' }, D2);
+  punch(D2 - 0.02, 1.03); shake(D2, 8); sfx(D2 - 0.03, 'hit', { g: 0.65 });
+  tl.to(you2, { y: 260, rotate: 8, opacity: 0.12, duration: 0.7, ease: 'power3.in' }, D2 - 0.05);
+  sfx(D2, 'fall');
+  tl.to('#serp2 .card.k', { boxShadow: '0 0 0 4px rgba(234,67,53,.95), 0 20px 60px rgba(234,67,53,.25)', duration: 0.3, stagger: 0.05, ease: 'power2.out' }, D2 + 0.05);
 
   // overgang: fire Google-farvebånd
   const bands = $$('#wipe i');
@@ -217,14 +234,15 @@ const BUILD = () => {
   gsap.set('#gads', { transformOrigin: '0% 0%' });
   tl.to('#gads', { ...LAY.gadsShrink, duration: 0.45, ease: 'expo.inOut' }, 7.24);
 
-  rise(I('#s3l .star'), w('l3', 7) - 0.07, { st: 0.05 });
+  const S3 = COPY.s3, OV = cw(S3.ov.cue);
+  rise(I('#s3l .star'), cw(S3.star.cue) - 0.07, { st: 0.05 });
   gsap.set('#s3l .ov', { transformOrigin: '0% 55%' });
-  slam('#s3l .ov', w('l3', 9) - 0.07, { s: 1.7 });
-  punch(w('l3', 9) - 0.03, 1.055); shake(w('l3', 9), 15); sfx(w('l3', 9) - 0.04, 'hit', { g: 1 });
+  slam('#s3l .ov', OV - 0.07, { s: 1.7 });
+  punch(OV - 0.03, 1.055); shake(OV, 15); sfx(OV - 0.04, 'hit', { g: 1 });
   const capw = I('#s3l .cap');
-  [10, 11, 12, 13].forEach((wi, k) => rise(capw[k], w('l3', wi) - 0.05, { d: 0.55 }));
-  enter('#s3l .cap .mk', { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: 'expo.inOut' }, w('l3', 13) + 0.04);
-  tl.to('#s3l .cap .hi .i', { color: '#fff', duration: 0.25, ease: 'power1.out' }, w('l3', 13) + 0.2);
+  S3.cap.cues.forEach((c, k) => rise(capw[k], cw(c) - 0.05, { d: 0.55 }));
+  enter('#s3l .cap .mk', { scaleX: 0 }, { scaleX: 1, duration: 0.45, ease: 'expo.inOut' }, cw(S3.cap.hlCue) + 0.04);
+  tl.to('#s3l .cap .hi .i', { color: '#fff', duration: 0.25, ease: 'power1.out' }, cw(S3.cap.hlCue) + 0.2);
 
   gsap.set('#serp3', { transformPerspective: 1800, ...LAY.serp3 });
   enter('#serp3', { opacity: 0, x: 140 }, { opacity: 1, x: 0, duration: 0.9 }, 5.92);
@@ -239,14 +257,15 @@ const BUILD = () => {
   tl.to(['#k31', '#k32', '#k33'], { opacity: 0.5, duration: 0.5, ease: 'power1.out' }, UP + 0.3);
   tl.to('#you3 .ring', { opacity: 1, duration: 0.3, ease: 'power1.out' }, UP + 0.45);
   sfx(UP, 'up');
-  tl.to('#rank', { scale: 1, duration: 0.5, ease: 'back.out(2.6)' }, w('l3', 9) - 0.04);
-  sfx(w('l3', 9) + 0.05, 'ding');
+  tl.to('#rank', { scale: 1, duration: 0.5, ease: 'back.out(2.6)' }, OV - 0.04);
+  sfx(OV + 0.05, 'ding');
 
   // markør klikker "Ring nu"
   gsap.set('#cursor', { x: LAY.cursor.from[0], y: LAY.cursor.from[1], opacity: 0, transformOrigin: '20% 10%' });
-  tl.to('#cursor', { opacity: 1, duration: 0.2, ease: 'none' }, 8.5);
-  tl.to('#cursor', { x: LAY.cursor.to[0], y: LAY.cursor.to[1], duration: 0.8, ease: 'power3.inOut' }, 8.5);
-  const CLICK = 9.36;
+  // klikket følger evt. et ord i speaken, men senest 9,36 s, så ripplen dækker skærmen før scene 4
+  const CLICK = S3.click ? Math.min(9.36, cw(S3.click)) : 9.36;
+  tl.to('#cursor', { opacity: 1, duration: 0.2, ease: 'none' }, CLICK - 0.86);
+  tl.to('#cursor', { x: LAY.cursor.to[0], y: LAY.cursor.to[1], duration: 0.8, ease: 'power3.inOut' }, CLICK - 0.86);
   tl.to('#cursor', { scale: 0.8, duration: 0.07, ease: 'power2.out' }, CLICK);
   tl.to('#cursor', { scale: 1, duration: 0.2, ease: 'back.out(3)' }, CLICK + 0.08);
   tl.to('#call', { scale: 0.92, backgroundColor: '#2B8C45', duration: 0.07, ease: 'power2.out' }, CLICK);
@@ -376,9 +395,9 @@ const BUILD = () => {
     if (k) sfx(w('l6', k) - 0.04, 'hit', { g: 0.35 });
   });
   const onw = I('#oname');
-  [3, 4, 5].forEach((wi, k) => rise(onw[k], w('l6', wi) - 0.06, { d: 0.7 }));
-  const NU = w('l6', 5);
-  enter('#tag', { opacity: 0, letterSpacing: '.7em' }, { opacity: 1, letterSpacing: '.3em', duration: 1.1 }, NU + 0.12);
+  COPY.s6.oname.cues.forEach((c, k) => rise(onw[k], cw(c) - 0.06, { d: 0.7 }));
+  const NU = C.l6.words.at(-1).t;   // sidste ord i speaken
+  enter('#tag', { opacity: 0, letterSpacing: '.7em' }, { opacity: 1, letterSpacing: '.3em', duration: 1.1 }, COPY.s6.tag.cue ? cw(COPY.s6.tag.cue) : NU + 0.12);
   enter('#sbar6', { opacity: 0, y: 46, scale: 0.92 }, { opacity: 1, y: 0, scale: 1, duration: 0.7 }, NU + 0.28);
   sfx(NU + 0.28, 'swish', { f: 1.1 });
   const t6 = typeHook($('#q6'), 'onlinemarketing.nu', NU + 0.5, 0.033);

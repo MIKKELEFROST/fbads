@@ -1,15 +1,13 @@
 """Generér dansk speak (Microsoft Edge neural TTS, stemme da-DK-JeppeNeural).
 
-    python3 tools/tts.py            → audio/vo/<klip>.mp3 + audio/vo/words.json
-    python3 tools/measure.py        → audio/vo/<klip>.wav + audio/vo/spans.json
+    python3 tools/tts.py v2         → audio/v2/vo/<klip>.mp3 + words.json
+    python3 tools/measure.py v2     → audio/v2/vo/<klip>.wav + spans.json
 
 Kræver `pip install edge-tts`. Bag en TLS-proxy: sæt CA_BUNDLE til proxyens CA-fil.
 """
 import asyncio
 import json
 import os
-import sys
-from pathlib import Path
 
 import certifi
 
@@ -17,10 +15,12 @@ if os.environ.get("CA_BUNDLE"):
     certifi.where = lambda: os.environ["CA_BUNDLE"]
 import edge_tts  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "audio" / "vo"
-LINES = json.loads((Path(__file__).parent / "lines.json").read_text())
-VOICE = sys.argv[1] if len(sys.argv) > 1 else "da-DK-JeppeNeural"
+import variant  # noqa: E402
+
+P = variant.paths(variant.name())
+OUT = P["vo"]
+LINES = json.loads(P["lines"].read_text())
+VOICE = "da-DK-JeppeNeural"
 
 
 async def gen(key, text, rate, pitch):

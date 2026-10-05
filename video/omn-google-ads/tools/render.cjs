@@ -4,7 +4,7 @@
  *   node tools/render.cjs --out /tmp/frames --fps 60 --workers 4
  *   node tools/render.cjs --out /tmp/stills --stills 1.2,3.9,8.0
  *   node tools/render.cjs --sfx audio/sfx.json      (gem kun lydeffekt-tidspunkter)
- *   tilføj --format 916 for den lodrette 1080×1920-version
+ *   tilføj --format 916 for den lodrette 1080×1920-version og --variant v2 for en anden filmversion
  *
  * Kræver playwright (NODE_PATH=$(npm root -g) hvis den er installeret globalt).
  */
@@ -22,6 +22,7 @@ const FPS = +(args.fps || 60);
 const WORKERS = +(args.workers || 4);
 const OUT = args.out ? path.resolve(args.out) : null;
 const VERT = String(args.format) === '916';
+const VARIANT = typeof args.variant === 'string' ? args.variant : 'v1';
 const VIEW = VERT ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.json': 'application/json' };
@@ -52,7 +53,7 @@ async function shoot(page, t, file) {
 
 (async () => {
   const srv = await serve();
-  const url = `http://127.0.0.1:${srv.address().port}/index.html${VERT ? '?f=916' : ''}`;
+  const url = `http://127.0.0.1:${srv.address().port}/index.html?v=${VARIANT}${VERT ? '&f=916' : ''}`;
   const launch = () => chromium.launch({ args: ['--disable-gpu-vsync', '--font-render-hinting=none'] });
 
   if (args.sfx) {

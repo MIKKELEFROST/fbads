@@ -1,12 +1,13 @@
-"""Mål hvor talen starter/slutter i hvert speak-klip (RMS-tærskel) → audio/vo/spans.json."""
+"""Mål hvor talen starter/slutter i hvert speak-klip (RMS-tærskel) → audio/<variant>/vo/spans.json."""
 import json
 import subprocess
-from pathlib import Path
 
 import numpy as np
 import scipy.io.wavfile as w
 
-VO = Path(__file__).resolve().parent.parent / "audio" / "vo"
+import variant
+
+VO = variant.paths(variant.name())["vo"]
 res = {}
 for f in sorted(VO.glob("*.mp3")):
     k = f.stem

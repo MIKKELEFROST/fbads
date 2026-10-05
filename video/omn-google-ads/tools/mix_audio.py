@@ -1,10 +1,10 @@
 """Lydspor til OMN-filmen: syntetiseret musik (120 BPM), lydeffekter og speak.
 
 Alt genereres her (ingen licenserede samples). Musik og effekter følger de samme
-tidspunkter som animationen: speak fra build_cues.PLACEMENT, effekter fra
-audio/sfx.json (eksporteret af `node tools/render.cjs --sfx audio/sfx.json`).
+tidspunkter som animationen: speak fra variants/<v>/lines.json ("at"), effekter fra
+audio/<v>/sfx.json (eksporteret af `node tools/render.cjs --variant v2 --sfx audio/v2/sfx.json`).
 
-    python3 tools/mix_audio.py          → audio/mix.wav (48 kHz stereo, 20 s)
+    python3 tools/mix_audio.py v2       → audio/v2/mix.wav (48 kHz stereo, 20 s)
 """
 import json
 import subprocess
@@ -14,10 +14,12 @@ import numpy as np
 import scipy.io.wavfile as wavfile
 from scipy import signal
 
+import variant
 from build_cues import build as build_cues
 
 ROOT = Path(__file__).resolve().parent.parent
-AUD = ROOT / "audio"
+VARIANT = variant.name()
+AUD = variant.paths(VARIANT)["aud"]
 SR = 48000
 DUR = 20.0
 N = int(SR * DUR)
@@ -378,7 +380,7 @@ def duck_env(vo, depth_db=8.0):
 
 
 def main():
-    cues = build_cues()
+    cues = build_cues(VARIANT)
     sfx_events = json.loads((AUD / "sfx.json").read_text())
 
     mus = music()
