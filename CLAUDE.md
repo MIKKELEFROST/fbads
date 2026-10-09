@@ -9,6 +9,10 @@ starter uden hukommelse fra tidligere sessioner — alt, der skal overleve, stå
 
 - [Holmsmaler — leads fra Meta Ads](routines/holmsmaler-leads.md)
 
+## Automatisering
+
+- [Make: lead-scenarier og Facebook-forbindelsen](routines/make-forbindelser.md) — scenarie- og hook-ID'er, fejlmønsteret når Facebook-tokenet dør, og hvordan det rettes.
+
 ## Generelt om lead-håndtering
 
 **Meta Ads MCP kan ikke hente lead-oplysninger.** Feltkataloget indeholder præcis ét
