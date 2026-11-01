@@ -83,3 +83,9 @@ forhold til tidligere (september: 230 kr, oktober: 432 kr).
 - Pauset: "Tømrer – Foto Sjælland #2.0" (den hidtil bedste, 239 kr/lead aug–okt),
   "Før/Efter #2.1", "Få Hjælp #1.1", "Hvorfor os? #1.2", samt annoncesættene
   "Tømrer – 25-44" og "Tømrer – 45+".
+- Klar til december, på pause i "Tømrer": "Dec – Vinduer om vinteren #4.0"
+  (`120250567442270073`), "Dec – Næste års projekt #4.0" (`120250567443950073`),
+  "Dec – Bygger indenfor #4.0" (`120250567445170073`). En planlagt opgave tænder
+  dem 1. december kl. 00:05 og pauser november-annoncerne, når december-annoncerne
+  er godkendt. Kampagnen tillader ikke tidsstyring på enkelte annoncer.
+- Billeder og skabelon: `creatives/holmsmaler/`.
