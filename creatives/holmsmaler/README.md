@@ -1,5 +1,22 @@
 # Holms Maler & Tømrer — statics til Meta
 
+## Maskot-annoncer (`maskot/`)
+
+Tegnet maskot i stil med "Hvorfor os"-annoncen: navy `#0C2137`, gul `#FFC803`,
+Montserrat. Begge formater som nedenfor.
+
+```bash
+cd maskot
+node build.js           # A-tjekliste, B-talebobbel, C-tape (vinduer/generelt)
+node build-ydelser.js   # D-tag, E-tilbygning, F-indendoers, G-terrasse
+```
+
+`build-ydelser.js` har tre skabeloner (tjekliste, talebobbel, tape); teksterne står
+i `ADS`. Maskottens "kig frem"-kant ligger ved x=236 i `assets/mascot2.png` — sæt
+kanten lig højre side af et panel, så ser det ud, som om han kigger frem bag det.
+
+## Foto-annoncer (`statics/`)
+
 `statics/build.js` bygger annoncebillederne i to formater med Playwright:
 
 - `*-feed.png` — 1080×1350 (4:5) til feed
@@ -25,5 +42,7 @@ I Meta lægges begge formater i samme annonce (placement asset customization):
 
 | Annonce | Kørt |
 |---|---|
-| `vinduer-traek`, `vinduer-vater`, `indendoers-detaljer` | 1.–30. november 2026 |
-| `dec-vinduer-vinter`, `dec-planlaeg`, `dec-indendoers` | fra 1. december 2026 |
+| `vinduer-traek`, `vinduer-vater`, `indendoers-detaljer` | 1.–2. november 2026 |
+| `dec-vinduer-vinter`, `dec-planlaeg`, `dec-indendoers` | aldrig — december-planen blev droppet |
+| Maskot A–C | fra 2. november 2026 |
+| Maskot D–G | oprettet 2. november 2026, på pause |

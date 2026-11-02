@@ -74,18 +74,24 @@ Send kun push, når Mikkel skal gøre noget:
 Værd at nævne, hvis det opdages undervejs: pris pr. lead er steget markant i
 forhold til tidligere (september: 230 kr, oktober: 432 kr).
 
-## Status pr. 1. november 2026
+## Status pr. 2. november 2026
 
-- Tre nye annoncer i "Tømrer" (4:5 til feed, 9:16 til Stories/Reels), alle på
-  formular `1493450252272167`: "Vinduer – Trækker det #3.0", "Vinduer – Sat i
-  vater #3.0", "Tømrer – Målt to gange #3.0". Billederne er AI-genererede;
-  AI-erklæringen i Meta er ikke udfyldt.
-- Pauset: "Tømrer – Foto Sjælland #2.0" (den hidtil bedste, 239 kr/lead aug–okt),
-  "Før/Efter #2.1", "Få Hjælp #1.1", "Hvorfor os? #1.2", samt annoncesættene
-  "Tømrer – 25-44" og "Tømrer – 45+".
-- Klar til december, på pause i "Tømrer": "Dec – Vinduer om vinteren #4.0"
-  (`120250567442270073`), "Dec – Næste års projekt #4.0" (`120250567443950073`),
-  "Dec – Bygger indenfor #4.0" (`120250567445170073`). En planlagt opgave tænder
-  dem 1. december kl. 00:05 og pauser november-annoncerne, når december-annoncerne
-  er godkendt. Kampagnen tillader ikke tidsstyring på enkelte annoncer.
-- Billeder og skabelon: `creatives/holmsmaler/`.
+- Kører i "Tømrer": tre maskot-annoncer (4:5 til feed, 9:16 til Stories/Reels),
+  alle på formular `1493450252272167`: "Maskot – Tjekliste #5.0"
+  (`120250592107120073`), "Maskot – Talebobbel #5.0" (`120250592110250073`),
+  "Maskot – Tape #5.0" (`120250592111630073`). Tændt 2. november.
+- Klar på pause i "Tømrer", maskot-annoncer til andet end vinduer: "Maskot – Tag
+  #5.0" (`120250592172860073`), "Maskot – Tilbygning #5.0" (`120250592173970073`),
+  "Maskot – Indendørs #5.0" (`120250592175440073`), "Maskot – Terrasse #5.0"
+  (`120250592176680073`). De tændes kun, når Mikkel siger til.
+- Pauset 2. november: november-annoncerne "Vinduer – Trækker det #3.0", "Vinduer –
+  Sat i vater #3.0", "Tømrer – Målt to gange #3.0" (AI-genererede fotos;
+  AI-erklæringen i Meta er ikke udfyldt).
+- December-planen er droppet: "Dec – … #4.0"-annoncerne (`120250567442270073`,
+  `120250567443950073`, `120250567445170073`) bliver på pause, og der er ingen
+  planlagt opgave, der tænder dem.
+- Også pauset: "Tømrer – Foto Sjælland #2.0" (239 kr/lead aug–okt), "Før/Efter
+  #2.1", "Få Hjælp #1.1", "Hvorfor os? #1.2", samt annoncesættene "Tømrer – 25-44"
+  og "Tømrer – 45+".
+- Billeder og skabeloner: `creatives/holmsmaler/` (maskot-annoncerne ligger i
+  `maskot/`).
