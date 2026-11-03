@@ -16,7 +16,8 @@ lead-felt: `lead` (heltal, antal). `lead_id`, `full_name`, `phone_number`, `emai
 `leadgen_form` findes ikke. Meta Ads MCP kan altså bruges til at se *om* og *hvor mange*
 leads der er kommet, og hvornår — men aldrig hvem.
 
-**Kontaktoplysninger hentes via Zapier MCP → Facebook Lead Ads.** Det kræver ikke, at en
+**Skal kontaktoplysninger bruges (fx ved fejlsøgning), hentes de via Zapier MCP →
+Facebook Lead Ads.** Det kræver ikke, at en
 zap er aktiv. Zappen `FB Leads -> Email (HolmsMaler)` har været på pause siden 10-08-2026
 (kontoen røg på Free-planen, og Facebook Lead Ads er en premium-app), men selve
 handlingen kan stadig kaldes direkte på forespørgsel. Verificeret 09-09-2026: hentede 30
@@ -24,3 +25,7 @@ leads tilbage til juni med pauset zap.
 
 Brug de to kilder sammen: Meta Ads MCP til at bekræfte antal og dato, Zapier til
 oplysningerne. Hvis de to ikke stemmer overens, sig det til Mikkel frem for at gætte.
+
+**Holms Malers leads leveres automatisk af Make** (Meta → Make → kundens CRM + mail
+"NYT LEAD" til kunden), siden 14-09-2026. Rutiner sender ikke leads til kunden; de
+kontrollerer kun, at alt er kommet frem. Se rutinen ovenfor.
