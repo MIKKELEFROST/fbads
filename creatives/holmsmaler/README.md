@@ -45,4 +45,5 @@ I Meta lægges begge formater i samme annonce (placement asset customization):
 | `vinduer-traek`, `vinduer-vater`, `indendoers-detaljer` | 1.–2. november 2026 |
 | `dec-vinduer-vinter`, `dec-planlaeg`, `dec-indendoers` | aldrig — december-planen blev droppet |
 | Maskot A–C | fra 2. november 2026 |
-| Maskot D–G | oprettet 2. november 2026, på pause |
+| Maskot D-tag, F-indendoers | fra 3. november 2026 |
+| Maskot E-tilbygning, G-terrasse | oprettet 2. november 2026, på pause |

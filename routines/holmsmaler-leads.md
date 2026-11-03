@@ -76,14 +76,16 @@ forhold til tidligere (september: 230 kr, oktober: 432 kr).
 
 ## Status pr. 2. november 2026
 
-- Kører i "Tømrer": tre maskot-annoncer (4:5 til feed, 9:16 til Stories/Reels),
-  alle på formular `1493450252272167`: "Maskot – Tjekliste #5.0"
-  (`120250592107120073`), "Maskot – Talebobbel #5.0" (`120250592110250073`),
-  "Maskot – Tape #5.0" (`120250592111630073`). Tændt 2. november.
-- Klar på pause i "Tømrer", maskot-annoncer til andet end vinduer: "Maskot – Tag
-  #5.0" (`120250592172860073`), "Maskot – Tilbygning #5.0" (`120250592173970073`),
-  "Maskot – Indendørs #5.0" (`120250592175440073`), "Maskot – Terrasse #5.0"
-  (`120250592176680073`). De tændes kun, når Mikkel siger til.
+- Kører i "Tømrer" (4:5 til feed, 9:16 til Stories/Reels), alle på formular
+  `1493450252272167`:
+  - fra 2. november: "Maskot – Tjekliste #5.0" (`120250592107120073`), "Maskot –
+    Talebobbel #5.0" (`120250592110250073`), "Maskot – Tape #5.0"
+    (`120250592111630073`);
+  - fra 3. november: "Maskot – Tag #5.0" (`120250592172860073`), "Maskot –
+    Indendørs #5.0" (`120250592175440073`).
+- Klar på pause i "Tømrer": "Maskot – Tilbygning #5.0" (`120250592173970073`) og
+  "Maskot – Terrasse #5.0" (`120250592176680073`, tænkt til februar). De tændes
+  kun, når Mikkel siger til.
 - Pauset 2. november: november-annoncerne "Vinduer – Trækker det #3.0", "Vinduer –
   Sat i vater #3.0", "Tømrer – Målt to gange #3.0" (AI-genererede fotos;
   AI-erklæringen i Meta er ikke udfyldt).
